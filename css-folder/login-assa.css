@@ -1,0 +1,262 @@
+/* ==========================================================
+   OSSA Portal – login theme (green / white)
+   Drop-in replacement for css-folder/login-assa.css
+   Change the colours only in the :root block below.
+   ========================================================== */
+:root{
+  --g-50:  #f2faf5;
+  --g-100: #e0f3e8;
+  --g-200: #bfe5cf;
+  --g-300: #8fd0ab;
+  --g-500: #2f9e66;
+  --g-600: #1f8554;
+  --g-700: #166a42;
+  --g-900: #0b3322;
+
+  --ink:   #0d1f17;
+  --muted: #5b6e64;
+  --line:  #dbe6df;
+  --bg:    #f6fbf8;
+  --card:  #ffffff;
+
+  --bad:      #c8362b;
+  --bad-soft: #fdeceb;
+  --ok:       #1f8554;
+
+  --radius-card: 28px;
+  --radius-field: 14px;
+  --radius-btn: 16px;
+}
+
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--ink);
+  background:var(--bg);
+  display:grid;place-items:center;
+  padding:24px;
+  position:relative;
+  overflow-x:hidden;
+}
+
+/* ---------- blob background (same shapes, green palette) ---------- */
+body::before,body::after{
+  content:"";position:fixed;z-index:0;pointer-events:none;border-radius:50%;
+  filter:blur(80px);
+}
+body::before{
+  width:640px;height:640px;left:-180px;top:12%;
+  background:radial-gradient(circle,var(--g-200) 0%,transparent 70%);
+  opacity:.9;
+}
+body::after{
+  width:760px;height:760px;right:-220px;top:-10%;
+  background:radial-gradient(circle,#d8f1c9 0%,transparent 70%);
+  opacity:.9;
+}
+.blob{position:fixed;z-index:0;pointer-events:none;border-radius:50%;filter:blur(90px)}
+.blob.b1{width:560px;height:560px;right:-120px;bottom:-160px;background:radial-gradient(circle,var(--g-300) 0%,transparent 70%);opacity:.55}
+.blob.b2{width:420px;height:420px;left:20%;bottom:-180px;background:radial-gradient(circle,#c9efe0 0%,transparent 70%);opacity:.8}
+
+/* ---------- card ---------- */
+.card{
+  position:relative;z-index:1;
+  width:100%;max-width:600px;
+  background:var(--card);
+  border-radius:var(--radius-card);
+  padding:38px;
+  box-shadow:0 30px 80px -30px rgba(22,106,66,.28),0 2px 6px rgba(13,31,23,.04);
+}
+
+.brand{display:flex;align-items:center;gap:16px;margin-bottom:26px}
+.brand .logo{width:46px;height:46px;object-fit:contain;display:block}
+.brand b{display:block;font-size:17px;letter-spacing:.2px;color:var(--ink)}
+.brand small{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+
+.portal-tag{
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  height:52px;border-radius:999px;
+  background:var(--g-50);
+  font-weight:600;font-size:16px;color:var(--g-700);
+  margin-bottom:30px;
+}
+.portal-tag::before{
+  content:"";width:9px;height:9px;border-radius:50%;
+  background:var(--g-500);box-shadow:0 0 0 4px var(--g-100);
+}
+
+h1{font-size:30px;letter-spacing:-.4px;margin-bottom:24px}
+
+/* ---------- fields ---------- */
+.field{margin-bottom:20px}
+.row{display:flex;justify-content:space-between;align-items:baseline}
+label.t{display:block;font-size:14.5px;font-weight:600;margin-bottom:8px}
+
+/* message that sits on top of the input */
+.msg{
+  display:flex;align-items:center;gap:7px;
+  font-size:13px;font-weight:600;color:var(--bad);
+  max-height:0;opacity:0;overflow:hidden;
+  transform:translateY(4px);
+  transition:max-height .25s ease,opacity .25s ease,transform .25s ease,margin .25s ease;
+}
+.msg svg{flex:none}
+.field.is-error .msg{max-height:40px;opacity:1;transform:none;margin-bottom:8px}
+
+input[type=email],input[type=password],input[type=text]{
+  width:100%;height:54px;
+  border:1.5px solid var(--line);
+  border-radius:var(--radius-field);
+  padding:0 16px;
+  font:inherit;font-size:15.5px;color:var(--ink);
+  background:#fff;outline:none;
+  transition:border-color .18s,box-shadow .18s,background .18s;
+}
+input::placeholder{color:#9db0a5}
+input:hover{border-color:var(--g-300)}
+input:focus{border-color:var(--g-500);box-shadow:0 0 0 4px rgba(47,158,102,.16)}
+
+.field.is-error input{
+  border-color:var(--bad);background:var(--bad-soft);
+  animation:shake .38s ease;
+}
+.field.is-error input:focus{box-shadow:0 0 0 4px rgba(200,54,43,.15)}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-6px)}
+  40%{transform:translateX(5px)}
+  60%{transform:translateX(-4px)}
+  80%{transform:translateX(2px)}
+}
+
+a{color:var(--g-600);font-weight:600;font-size:14px;text-decoration:none;background:none;border:0;cursor:pointer;font-family:inherit}
+a:hover,.linkbtn:hover{text-decoration:underline}
+.linkbtn{color:var(--g-600);font-weight:600;font-size:14px;background:none;border:0;cursor:pointer;font-family:inherit;padding:0}
+
+.pw{position:relative}
+.pw input{padding-right:52px}
+.eye{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:42px;height:42px;border:0;background:none;border-radius:10px;
+  display:grid;place-items:center;color:var(--ink);cursor:pointer;
+  transition:background .15s,color .15s;
+}
+.eye:hover{background:var(--g-50);color:var(--g-700)}
+.eye:focus-visible{outline:2px solid var(--g-500)}
+.eye .off{display:none}
+.eye.on .off{display:block}
+.eye.on .shown{display:none}
+
+/* ---------- buttons ---------- */
+.btn{
+  width:100%;height:54px;border:0;cursor:pointer;
+  border-radius:var(--radius-btn);
+  background:var(--g-700);color:#fff;
+  font:inherit;font-weight:600;font-size:16px;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:background .18s,transform .1s,box-shadow .18s;
+  box-shadow:0 10px 24px -12px rgba(22,106,66,.7);
+}
+.btn:hover{background:var(--g-600)}
+.btn:active{transform:scale(.99)}
+.btn:focus-visible{outline:3px solid var(--g-300);outline-offset:2px}
+.btn[disabled]{opacity:.75;cursor:progress}
+.btn .spin{
+  display:none;width:18px;height:18px;border-radius:50%;
+  border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;
+  animation:spin .7s linear infinite;
+}
+.btn.loading .spin{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.btn.ghost{
+  background:#fff;color:var(--ink);box-shadow:none;
+  border:1.5px solid var(--line);
+}
+.btn.ghost:hover{background:var(--g-50);border-color:var(--g-300)}
+
+.alt{text-align:center;font-size:14px;color:var(--muted);margin-top:22px}
+.note{text-align:center;font-size:12.5px;color:#8a9b91;margin-top:14px}
+
+/* top-of-form banner for "wrong credentials" */
+.banner{
+  display:none;align-items:center;gap:10px;
+  background:var(--bad-soft);color:var(--bad);
+  border:1px solid #f4c7c3;border-radius:12px;
+  padding:12px 14px;margin-bottom:20px;
+  font-size:14px;font-weight:600;
+}
+.banner.show{display:flex}
+
+/* ---------- modal wizard (forgot password) ---------- */
+.modal{
+  position:fixed;inset:0;z-index:50;
+  display:grid;place-items:center;padding:20px;
+  background:rgba(11,51,34,.45);backdrop-filter:blur(4px);
+  opacity:0;visibility:hidden;
+  transition:opacity .22s,visibility .22s;
+}
+.modal.open{opacity:1;visibility:visible}
+.sheet{
+  width:100%;max-width:440px;background:#fff;
+  border-radius:24px;padding:30px;position:relative;
+  box-shadow:0 40px 90px -30px rgba(11,51,34,.6);
+  transform:translateY(14px) scale(.98);
+  transition:transform .25s cubic-bezier(.2,.8,.2,1);
+}
+.modal.open .sheet{transform:none}
+.x{
+  position:absolute;right:14px;top:14px;width:38px;height:38px;border:0;border-radius:50%;
+  background:transparent;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;
+}
+.x:hover{background:var(--g-50);color:var(--ink)}
+
+.steps{display:flex;gap:6px;margin-bottom:22px;padding-right:40px}
+.steps i{flex:1;height:5px;border-radius:9px;background:var(--g-100);transition:background .25s}
+.steps i.done{background:var(--g-500)}
+
+.form-status{
+  display:none;border-radius:12px;padding:11px 13px;margin:0 0 16px;
+  font-size:13.5px;line-height:1.45;font-weight:600;
+}
+.form-status.show{display:block}
+.form-status.error{background:var(--bad-soft);color:var(--bad)}
+.form-status.success{background:var(--g-50);color:var(--g-700)}
+
+.step{display:none}
+.step.active{display:block;animation:slide .3s ease}
+@keyframes slide{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.step h2{font-size:22px;letter-spacing:-.3px;margin-bottom:8px}
+.step p.sub{font-size:14.5px;color:var(--muted);line-height:1.5;margin-bottom:20px}
+.step .btn{margin-top:6px}
+.step .back{display:block;margin:16px auto 0}
+
+.code{display:flex;gap:8px;justify-content:space-between}
+.code input{
+  width:100%;height:56px;text-align:center;padding:0;
+  font-size:22px;font-weight:700;letter-spacing:0;
+}
+
+.strength{height:5px;border-radius:9px;background:var(--g-100);margin-top:10px;overflow:hidden}
+.strength span{display:block;height:100%;width:0;background:var(--bad);border-radius:9px;transition:width .25s,background .25s}
+.hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+
+.done-mark{
+  width:68px;height:68px;border-radius:50%;
+  background:var(--g-100);color:var(--g-600);
+  display:grid;place-items:center;margin:4px auto 18px;
+}
+.step.center{text-align:center}
+.step.center p.sub{margin-bottom:22px}
+
+@media (max-width:520px){
+  .card{padding:26px 20px}
+  h1{font-size:26px}
+  .sheet{padding:24px 20px}
+  .code{gap:6px}
+  .code input{height:50px;font-size:20px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}

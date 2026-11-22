@@ -1,0 +1,14 @@
+/databases/data/*.db
+/databases/data/*.db-*
+/databases/data/*.backup-*
+/vendor/
+
+# Local database and private configuration
+/databases/data/*.db
+/databases/data/*.db-*
+/.env
+/.env.*
+/php-connections/test-mail.php
+/php-connections/check-forgot-password.php
+/php-connections/update-existing-account.php
+/php-connections/update-existing-account.ps1
