@@ -243,8 +243,8 @@
   #create .batch-search input { width:100%; height:40px; border:1.5px solid var(--line); border-radius:11px; padding:0 12px; font:inherit; font-size:13px; color:var(--ink); background:#fff; }
   #create .batch-browser { grid-column:1/-1; display:grid; grid-template-columns:42px repeat(5,minmax(70px,1fr)) 42px; align-items:stretch; gap:8px; width:100%; }
   #create .batch-browser.batch-six { grid-template-columns:42px repeat(6,minmax(62px,1fr)) 42px; }
-  #create .batch-browser.search-results { grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); }
-  #create .batch-nav { border:1.5px solid var(--line); border-radius:12px; background:#fff; color:var(--deep); cursor:pointer; font-size:20px; font-weight:800; min-height:75px; }
+  #create .batch-nav { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; border:1.5px solid var(--line); border-radius:12px; background:#fff; color:var(--deep); cursor:pointer; font-size:20px; font-weight:800; min-height:75px; padding:4px; }
+  #create .batch-nav small { font-size:9px; font-weight:700; }
   #create .batch-nav:hover { border-color:#a7d8b8; background:var(--soft); }
   #create .batch-nav:disabled { opacity:.35; cursor:not-allowed; }
   #create .batch-card { min-height:75px; }
@@ -259,9 +259,9 @@
   @keyframes audience-check { to { opacity:1; transform:scale(1); } }
   @media (max-width:540px) {
     #create .audience-intro { flex-direction:column; }
-    #create .batch-browser { grid-template-columns:36px repeat(2,minmax(70px,1fr)) 36px; }
-    #create .batch-browser.batch-six { grid-template-columns:36px repeat(6,64px) 36px; overflow-x:auto; }
-    #create .batch-nav { min-height:64px; }
+    #create .batch-browser, #create .batch-browser.batch-six { grid-template-columns:32px repeat(3,minmax(50px,1fr)) 32px; gap:6px; }
+    #create .batch-nav { grid-row:span 2; min-height:64px; }
+    #create .batch-nav:last-child { grid-column:5; }
     #create .batch-card { min-height:64px; }
     #create .review-count-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     #create .recipient-options { grid-template-columns:1fr; }

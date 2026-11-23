@@ -7,122 +7,30 @@ require_once __DIR__ . '/../php-connections/auth.php';
   Ossa-login.php
   Login requests are handled by php-connections/login.php.
 */
-$accountCount = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn();
 $csrfToken = csrf_token();
-if ($accountCount === 0) {
-    $setupError = is_string($_GET['error'] ?? null) ? $_GET['error'] : '';
-    $setupMessages = [
-        'setup_name' => 'Enter a full name of 1 to 100 characters.',
-        'setup_email' => 'Enter a valid Gmail address.',
-        'setup_password' => 'Use a password between 8 and 4096 characters.',
-        'setup_confirmation' => 'The passwords do not match.',
-        'setup_csrf' => 'Your form session expired. Refresh the page and try again.',
-    ];
-    if (!isset($setupMessages[$setupError])) {
-        $setupError = '';
-    }
-    $setupName = htmlspecialchars(
-        is_string($_GET['name'] ?? null) ? $_GET['name'] : '',
-        ENT_QUOTES,
-        'UTF-8'
-    );
-    $setupEmail = htmlspecialchars(
-        is_string($_GET['email'] ?? null) ? $_GET['email'] : '',
-        ENT_QUOTES,
-        'UTF-8'
-    );
-    $setupCsrf = htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8');
-    ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OSSA Portal – Initial Admin Registration</title>
-<link rel="stylesheet" href="../css-folder/osa-dashboard.css">
-</head>
-<body class="setup-page">
-<div class="page-loading" aria-hidden="true"><span></span></div>
-<aside class="panel setup-sidebar" inert aria-disabled="true">
-  <div class="brand"><div class="logo"><i></i></div><div><b>OSA Portal</b><small>Announcements</small></div></div>
-  <nav aria-label="Main menu">
-    <span class="setup-nav-item cta">Create announcement</span>
-    <span class="setup-nav-item" aria-current="page">Dashboard</span>
-    <div class="grp">Requests</div>
-    <span class="setup-nav-item">Teacher requests</span>
-    <span class="setup-nav-item">Office requests</span>
-    <div class="grp">Workflow</div>
-    <span class="setup-nav-item">Drafts</span>
-    <span class="setup-nav-item">Office confirmation</span>
-    <span class="setup-nav-item">Director approval</span>
-    <span class="setup-nav-item">Returned for corrections</span>
-    <div class="grp">Records</div>
-    <span class="setup-nav-item">Published</span>
-    <span class="setup-nav-item">Cancelled / suspended</span>
-  </nav>
-  <div class="spacer"></div>
-  <nav aria-label="Account">
-    <span class="setup-nav-item">Settings</span>
-    <span class="setup-nav-item logout">Log out</span>
-  </nav>
-</aside>
-
-<main class="setup-main">
-  <header class="top panel">
-    <div class="hero">
-      <div><small>OSA PORTAL</small><h1>Initial administrator setup</h1><p>Create the first administrator account to unlock the portal.</p></div>
-    </div>
-  </header>
-  <section class="panel setup-card" aria-labelledby="setup-title">
-    <div class="setup-brand">
-      <img src="../logo/image/icons/converted.png" alt="CELTECH logo">
-      <div><b>CELTECH COLLEGE OLONGAPO</b><small>Office of Student Affairs</small></div>
-    </div>
-    <div class="setup-portal-tag">OSSA Portal</div>
-    <h2 id="setup-title">Register the first administrator</h2>
-    <p class="setup-intro">The sidebar and portal actions stay disabled until this account is registered and authenticated.</p>
-    <?php if ($setupError !== ''): ?>
-      <div class="setup-error" role="alert"><?= htmlspecialchars($setupMessages[$setupError], ENT_QUOTES, 'UTF-8') ?></div>
-    <?php endif; ?>
-    <form id="setupForm" action="../php-connections/register.php" method="post">
-      <input type="hidden" name="csrf_token" value="<?= $setupCsrf ?>">
-      <div class="fld">
-        <label for="setup-name">Full Name</label>
-        <input type="text" id="setup-name" name="name" value="<?= $setupName ?>" maxlength="100" autocomplete="name" required>
-      </div>
-      <div class="fld">
-        <label for="setup-email">Gmail Address</label>
-        <input type="email" id="setup-email" name="email" value="<?= $setupEmail ?>" maxlength="254" autocomplete="email" placeholder="you@gmail.com" required>
-      </div>
-      <div class="fld">
-        <label for="setup-password">Password</label>
-        <input type="password" id="setup-password" name="password" minlength="8" maxlength="4096" autocomplete="new-password" required>
-      </div>
-      <div class="fld">
-        <label for="setup-confirmation">Confirm Password</label>
-        <input type="password" id="setup-confirmation" name="password_confirmation" minlength="8" maxlength="4096" autocomplete="new-password" required>
-      </div>
-      <button class="btn green setup-submit" type="submit" data-loading-label="Creating account..."><span class="load-spinner" aria-hidden="true"></span><span data-button-label>Register administrator</span></button>
-    </form>
-  </section>
-</main>
-<script>
-document.getElementById("setupForm").addEventListener("submit", function (event) {
-  var button = this.querySelector('button[type="submit"]');
-  if (this.dataset.submitting === "true"){ event.preventDefault(); return; }
-  this.dataset.submitting = "true";
-  button.disabled = true;
-  button.setAttribute("aria-busy", "true");
-  button.classList.add("loading");
-  button.querySelector("[data-button-label]").textContent = button.dataset.loadingLabel;
-  document.body.classList.add("is-submitting");
-});
-</script>
-</body>
-</html>
-    <?php
-    exit;
+$registrationError = is_string($_GET['error'] ?? null) ? $_GET['error'] : '';
+$registrationMessages = [
+    'setup_name' => 'Enter a full name of 1 to 100 characters.',
+    'setup_email' => 'Enter a valid Gmail address.',
+    'setup_email_taken' => 'An account already uses this email address.',
+    'setup_password' => 'Use a password between 8 and 4096 characters.',
+    'setup_confirmation' => 'The passwords do not match.',
+    'setup_csrf' => 'Your form session expired. Refresh the page and try again.',
+];
+if (!isset($registrationMessages[$registrationError])) {
+    $registrationError = '';
 }
+$registrationName = htmlspecialchars(
+    is_string($_GET['name'] ?? null) ? $_GET['name'] : '',
+    ENT_QUOTES,
+    'UTF-8'
+);
+$registrationEmail = htmlspecialchars(
+    is_string($_GET['email'] ?? null) ? $_GET['email'] : '',
+    ENT_QUOTES,
+    'UTF-8'
+);
+$registrationOpen = $registrationError !== '';
 
 $err   = $_GET['error'] ?? '';
 $lockUntil = filter_var($_GET['until'] ?? null, FILTER_VALIDATE_INT);
@@ -166,7 +74,7 @@ $success = $registered || $loggedOut;
 
     <div class="banner <?= $err !== '' || $success ? 'show' : '' ?> <?= $success ? 'success' : '' ?>" id="banner" role="<?= $success ? 'status' : 'alert' ?>" data-lock-seconds="<?= $err === 'locked' ? $lockSeconds : '' ?>">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16.5v.01"/></svg>
-      <span id="bannerText"><?php if ($registered): ?>Administrator registered. Log in to continue.<?php elseif ($loggedOut): ?>You have been logged out successfully.<?php elseif ($err === 'setup_completed'): ?>Initial registration is already complete. Please log in.<?php elseif ($err === 'csrf'): ?>Your form session expired. Refresh the page and try again.<?php elseif ($err === 'locked'): ?>Too many failed login attempts. Please try again in <span id="lockoutCountdown"></span>.<?php else: ?>Wrong credentials. Check your email and password.<?php endif; ?></span>
+      <span id="bannerText"><?php if ($registered): ?>Account registered successfully. Log in to continue.<?php elseif ($loggedOut): ?>You have been logged out successfully.<?php elseif ($err === 'setup_completed'): ?>Initial registration is already complete. Please log in.<?php elseif ($err === 'csrf'): ?>Your form session expired. Refresh the page and try again.<?php elseif ($err === 'locked'): ?>Too many failed login attempts. Please try again in <span id="lockoutCountdown"></span>.<?php else: ?>Wrong credentials. Check your email and password.<?php endif; ?></span>
     </div>
 
     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
@@ -202,9 +110,42 @@ $success = $registered || $loggedOut;
 
     <button class="btn" type="submit" id="loginBtn" data-loading-label="Logging in..." <?= $err === 'locked' ? 'disabled' : '' ?>><span class="spin"></span><span data-button-label>Log in</span></button>
    
+    <p class="register-prompt">New to the OSSA Portal? <button type="button" class="linkbtn" id="openRegister">Register</button></p>
     <p class="note">Need help signing in? call the devloper for debugs.</p>
   </form>
 </main>
+
+<!-- REGISTRATION MODAL -->
+<div class="modal <?= $registrationOpen ? 'open' : '' ?>" id="register" aria-hidden="<?= $registrationOpen ? 'false' : 'true' ?>">
+  <div class="sheet register-sheet" role="dialog" aria-modal="true" aria-labelledby="register-title">
+    <button class="x" id="closeRegister" type="button" aria-label="Close">&times;</button>
+    <h2 id="register-title">Create an OSSA account</h2>
+    <p class="sub">Register your account, then log in with your new credentials.</p>
+    <?php if ($registrationError !== ''): ?>
+      <div class="register-error" role="alert"><?= htmlspecialchars($registrationMessages[$registrationError], ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+    <form id="registerForm" class="register-form" action="../php-connections/register.php" method="post">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+      <div class="field">
+        <label class="t" for="register-name">Full name</label>
+        <input type="text" id="register-name" name="name" value="<?= $registrationName ?>" maxlength="100" autocomplete="name" required>
+      </div>
+      <div class="field">
+        <label class="t" for="register-email">Gmail address</label>
+        <input type="email" id="register-email" name="email" value="<?= $registrationEmail ?>" maxlength="254" autocomplete="email" placeholder="you@gmail.com" required>
+      </div>
+      <div class="field">
+        <label class="t" for="register-password">Password</label>
+        <input type="password" id="register-password" name="password" minlength="8" maxlength="4096" autocomplete="new-password" required>
+      </div>
+      <div class="field">
+        <label class="t" for="register-confirmation">Confirm password</label>
+        <input type="password" id="register-confirmation" name="password_confirmation" minlength="8" maxlength="4096" autocomplete="new-password" required>
+      </div>
+      <button class="btn" type="submit" id="registerBtn" data-loading-label="Creating account..."><span class="spin"></span><span data-button-label>Register</span></button>
+    </form>
+  </div>
+</div>
 
 <!-- FORGOT PASSWORD WIZARD -->
 <div class="modal" id="forgot" aria-hidden="true">
@@ -268,6 +209,46 @@ $success = $registered || $loggedOut;
 </div>
 
 <script>
+/* ---------- registration modal ---------- */
+(function(){
+  var modal = document.getElementById("register");
+  var openButton = document.getElementById("openRegister");
+  var closeButton = document.getElementById("closeRegister");
+  var form = document.getElementById("registerForm");
+  var name = document.getElementById("register-name");
+  var button = document.getElementById("registerBtn");
+
+  function open(){
+    modal.classList.add("open");
+    modal.setAttribute("aria-hidden", "false");
+    name.focus();
+  }
+  function close(){
+    modal.classList.remove("open");
+    modal.setAttribute("aria-hidden", "true");
+    openButton.focus();
+  }
+
+  openButton.addEventListener("click", open);
+  closeButton.addEventListener("click", close);
+  modal.addEventListener("click", function(event){ if (event.target === modal) close(); });
+  document.addEventListener("keydown", function(event){
+    if (event.key === "Escape" && modal.classList.contains("open")) close();
+  });
+  form.addEventListener("submit", function(event){
+    if (!form.reportValidity()) { event.preventDefault(); return; }
+    if (form.dataset.submitting === "true"){ event.preventDefault(); return; }
+    form.dataset.submitting = "true";
+    button.classList.add("loading");
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.querySelector("[data-button-label]").textContent = button.dataset.loadingLabel;
+    document.body.classList.add("is-submitting");
+  });
+
+  <?php if ($registrationOpen): ?>name.focus();<?php endif; ?>
+})();
+
 /* ---------- show / hide password ---------- */
 function togglePw(btn){
   var input = btn.parentElement.querySelector("input");

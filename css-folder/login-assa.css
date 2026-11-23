@@ -190,6 +190,7 @@ a:hover,.linkbtn:hover{text-decoration:underline}
 
 .alt{text-align:center;font-size:14px;color:var(--muted);margin-top:22px}
 .note{text-align:center;font-size:12.5px;color:#8a9b91;margin-top:14px}
+.register-prompt{text-align:center;font-size:14px;color:var(--muted);margin-top:18px}
 
 /* top-of-form banner for "wrong credentials" */
 .banner{
@@ -219,6 +220,12 @@ a:hover,.linkbtn:hover{text-decoration:underline}
   transition:transform .25s cubic-bezier(.2,.8,.2,1);
 }
 .modal.open .sheet{transform:none}
+.register-sheet{max-height:calc(100vh - 40px);overflow-y:auto}
+.register-sheet h2{font-size:23px;letter-spacing:-.3px;margin:0 40px 8px 0}
+.register-sheet .sub{font-size:14px;color:var(--muted);line-height:1.5;margin-bottom:18px}
+.register-sheet .register-form .field{margin-bottom:14px}
+.register-sheet .register-form input{margin-top:7px}
+.register-error{padding:11px 13px;margin:0 0 16px;border:1px solid #f4c7c3;border-radius:12px;background:var(--bad-soft);color:var(--bad);font-size:13px;font-weight:600}
 .x{
   position:absolute;right:14px;top:14px;width:38px;height:38px;border:0;border-radius:50%;
   background:transparent;font-size:22px;line-height:1;color:var(--muted);cursor:pointer;

@@ -49,10 +49,11 @@ if (!hash_equals($password, $confirmation)) {
 
 try {
     begin_sqlite_immediate($db);
-    if ((int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn() !== 0) {
+    $existingAccount = $db->prepare('SELECT 1 FROM users WHERE email = :email COLLATE NOCASE LIMIT 1');
+    $existingAccount->execute([':email' => $email]);
+    if ($existingAccount->fetchColumn() !== false) {
         $db->rollBack();
-        header('Location: ../portals/Ossa-login.php?error=setup_completed');
-        exit;
+        redirect_to_registration('email_taken', $name, $email);
     }
 
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);

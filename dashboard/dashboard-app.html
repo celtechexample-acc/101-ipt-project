@@ -325,8 +325,8 @@
     var selectedStudents = [];
     var allStudents = [];
     var allBatches = [];
-    var activeSummary = null;
     var batchSearchQuery = '';
+    var batchPage = 0;
     var studentSearchQuery = '';
     var currentStep = 0;
     var audienceConfirmed = false;
@@ -389,6 +389,7 @@
       try {
         var result = await fetchJson('../php-connections/get-student-batches.php');
         allBatches = result.batches.map(String);
+        batchPage = 0;
         return true;
       } catch (error) {
         wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
@@ -404,17 +405,27 @@
 
       var search = batchSearchQuery.trim();
       var matches = allBatches.filter(function (year) { return year.indexOf(search) !== -1; });
+      var pageCount = matches.length > 6 ? Math.ceil((matches.length - 6) / 5) + 1 : 1;
+      batchPage = Math.min(batchPage, pageCount - 1);
+      var start = batchPage === 0 ? 0 : 6 + (batchPage - 1) * 5;
+      var end = batchPage === 0 ? 6 : start + 5;
+      var visibleYears = matches.slice(start, end);
       var browser = document.createElement('div');
-      browser.className = 'batch-browser search-results';
-      matches.forEach(function (year) {
+      browser.className = 'batch-browser' + (batchPage === 0 ? ' batch-six' : '');
+      browser.insertAdjacentHTML('beforeend', '<button type="button" class="batch-nav" data-batch-page="-1" aria-label="Previous years"' + (batchPage === 0 ? ' disabled' : '') + '><span aria-hidden="true">←</span><small>Previous</small></button>');
+      visibleYears.forEach(function (year) {
         browser.insertAdjacentHTML('beforeend', cardMarkup(year, year, '', state.batch === year, 'batch-card'));
       });
-      if (!matches.length) browser.innerHTML = '<p class="student-empty">No batch years match your search.</p>';
+      browser.insertAdjacentHTML('beforeend', '<button type="button" class="batch-nav" data-batch-page="1" aria-label="Next years"' + (batchPage >= pageCount - 1 ? ' disabled' : '') + '><span aria-hidden="true">→</span><small>Next</small></button>');
+      if (!matches.length) {
+        browser.innerHTML = '<p class="student-empty">No batch years match your search.</p>';
+      }
       wizardScreen.appendChild(browser);
       wizardContinue.disabled = !state.batch;
 
       $('#batchSearch', wizardScreen).addEventListener('input', function (event) {
         batchSearchQuery = event.target.value.slice(0, 4);
+        batchPage = 0;
         renderWizard(false);
         $('#batchSearch', wizardScreen).focus();
         var input = $('#batchSearch', wizardScreen);
@@ -423,26 +434,14 @@
       updateProgress();
     }
 
-    async function loadActiveSummary() {
-      var result = await fetchJson('../php-connections/get-audience-options.php?kind=active_summary');
-      activeSummary = result.summary;
-    }
-
     function renderModeStep() {
-      wizardInstruction.textContent = 'Choose the active-student audience or browse all student records, including SAMPLE/demo records.';
-      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading active recipient count...</p>';
+      wizardInstruction.textContent = 'Choose the 2026 course shortcut or browse all student records.';
+      wizardScreen.innerHTML =
+        cardMarkup('all_active', 'All Active Batch as of 2026', 'Skip batch selection and choose from courses with students enrolled in 2026.', false, 'recipient-choice') +
+        cardMarkup('selective', 'Select Student Records', 'Choose records from any batch, course, year level, and section, including SAMPLE/demo records.', state.mode === 'selective', 'recipient-choice');
       updateProgress();
-      wizardBack.disabled = true;
+      wizardBack.disabled = false;
       wizardContinue.disabled = true;
-      loadActiveSummary().then(function () {
-        wizardScreen.innerHTML =
-          cardMarkup('all_active', 'All Active Batch', activeSummary.eligible_count + ' eligible email recipients · ' + activeSummary.excluded_count + ' excluded without a unique valid email', state.mode === 'all_active', 'recipient-choice') +
-          cardMarkup('selective', 'Select Student Records', 'Choose records from any batch, course, year level, and section, including SAMPLE/demo records.', state.mode === 'selective', 'recipient-choice');
-      }).catch(function (error) {
-        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-      }).finally(function () {
-        wizardBack.disabled = false;
-      });
     }
 
     async function renderCourseStep() {
@@ -580,19 +579,6 @@
 
     function renderReview() {
       var chosen = selectedStudents;
-      if (state.mode === 'all_active') {
-        wizardInstruction.textContent = 'Review all active students before confirming this audience.';
-        wizardScreen.innerHTML = '<div class="review-count-grid">' +
-          '<div class="review-count"><strong>' + activeSummary.active_student_count + '</strong><span>Active student records</span></div>' +
-          '<div class="review-count"><strong>' + activeSummary.eligible_count + '</strong><span>Eligible unique email recipients</span></div>' +
-          '<div class="review-count"><strong>' + activeSummary.excluded_count + '</strong><span>Excluded invalid or duplicate emails</span></div></div>' +
-          '<div class="audience-summary"><div class="summary-row"><b>Audience</b><span>All active students across all batches, courses, year levels, and sections</span></div>' +
-          '<p class="demo-warning">No emails are sent during recipient selection.</p></div>';
-        updateProgress();
-        wizardContinue.disabled = activeSummary.eligible_count === 0;
-        return;
-      }
-
       var withEmail = chosen.filter(function (student) { return student.has_valid_email; }).length;
       var withoutEmail = chosen.length - withEmail;
       wizardInstruction.textContent = 'Review the selected recipient records.';
@@ -644,10 +630,8 @@
       openAudience.hidden = false;
       openAudience.textContent = audienceConfirmed ? 'Change audience' : 'Choose audience';
       if (audienceConfirmed) {
-        var audienceTitle = state.mode === 'all_active' ? 'All active students' : escapeHtml(state.batch) + ' · ' + escapeHtml(state.courseCode) + ' · ' + escapeHtml(state.yearLevelName);
-        var audienceDetail = state.mode === 'all_active'
-          ? activeSummary.eligible_count + ' eligible email recipients · ' + activeSummary.excluded_count + ' excluded'
-          : escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected students';
+        var audienceTitle = escapeHtml(state.batch) + ' · ' + escapeHtml(state.courseCode) + ' · ' + escapeHtml(state.yearLevelName);
+        var audienceDetail = escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected students';
         audienceCompact.innerHTML = '<span><strong>' + audienceTitle + '</strong><small>' + audienceDetail + '</small></span><button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
         audienceCompact.hidden = false;
         $('#editAudience', audienceCompact).addEventListener('click', function () {
@@ -670,6 +654,12 @@
 
     wizardScreen.addEventListener('click', function (event) {
       if (transitionBusy) return;
+      var pageButton = event.target.closest('[data-batch-page]');
+      if (pageButton && currentStep === 1 && !pageButton.disabled) {
+        batchPage += Number(pageButton.dataset.batchPage);
+        renderWizard(false);
+        return;
+      }
       var choice = event.target.closest('[data-choice]');
       if (!choice) {
         var checkbox = event.target.closest('.student-checkbox');
@@ -700,23 +690,18 @@
 
       var value = choice.dataset.choice;
       if (currentStep === 0) {
-        var selectedMode = value === 'all_active' ? 'all_active' : 'selective';
+        var selectedMode = 'selective';
         if (state.mode !== selectedMode) clearAfter(1);
         state.mode = selectedMode;
         audienceConfirmed = false;
         audienceValue.value = '';
         audienceCompact.hidden = true;
         if (value === 'all_active') {
-          if (!activeSummary) {
-            wizardContinue.disabled = true;
-            wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading active recipient count...</p>';
-            loadActiveSummary().then(function () { currentStep = 6; renderWizard(true); }).catch(function (error) {
-              wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-            });
-          } else {
-            currentStep = 6;
-            renderWizard(true);
-          }
+          clearAfter(1);
+          state.mode = 'selective';
+          state.batch = '2026';
+          currentStep = 2;
+          renderWizard(true);
           return;
         }
         wizardContinue.disabled = true;
@@ -752,7 +737,8 @@
     });
 
     $('#announcementForm').addEventListener('submit', async function (event) {
-      if (!event.submitter || event.submitter.value !== 'submit') return;
+      var submitter = event.submitter || document.activeElement;
+      if (!submitter || submitter.id !== 'go') return;
       event.preventDefault();
       var announcementStatus = $('#announcementStatus');
       if (!audienceConfirmed || !audienceValue.value) {
@@ -767,7 +753,7 @@
       }
       if (!this.reportValidity()) return;
 
-      var publishButton = event.submitter;
+      var publishButton = submitter;
       publishButton.disabled = true;
       announcementStatus.textContent = 'Publishing announcement and sending email...';
       announcementStatus.hidden = false;
