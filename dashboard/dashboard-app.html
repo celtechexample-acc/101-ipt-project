@@ -8,6 +8,7 @@
 </head>
 <body>
 
+<div class="page-loading" aria-hidden="true"><span></span></div>
 <div class="scrim"></div>
 
 <!-- ============ SIDEBAR (drawer on small screens) ============ -->
@@ -152,7 +153,8 @@
 
 <!-- ============ MODAL: CREATE ANNOUNCEMENT ============ -->
 <dialog id="create" aria-labelledby="ct">
-  <form method="dialog"><!-- change to action="..." method="post" when you connect it -->
+  <form method="dialog" id="announcementForm">
+    <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
     <div class="dlg-h">
       <div><h2 id="ct">Create announcement</h2><p>Enter the details, choose who it is for, then pick how it gets approved.</p></div>
       <button class="x" type="submit" value="cancel" formnovalidate aria-label="Close">&times;</button>
@@ -166,15 +168,16 @@
         <div class="audience-intro">
           <div>
             <span class="lbl" id="audienceLabel">Target Audience</span>
-            <p class="hint">Choose student recipients from the SQLite-backed sample database. No emails are sent by this wizard.</p>
+            <p class="hint">Choose all active students or select any student record, including demo records. Email addresses are checked when the announcement is published.</p>
           </div>
           <button class="btn ghost sm" type="button" id="openAudience">Choose audience</button>
         </div>
         <div class="audience-compact" id="audienceCompact" hidden aria-live="polite"></div>
+        <p class="hint" id="announcementStatus" role="status" aria-live="polite" hidden></p>
         <div class="audience-wizard" id="audienceWizard" hidden>
           <div class="wizard-progress">
-            <span id="wizardProgressLabel">Step 1 of 4</span>
-            <div class="wizard-progress-track" role="progressbar" aria-label="Audience selection progress" aria-valuemin="1" aria-valuemax="4" aria-valuenow="1">
+            <span id="wizardProgressLabel">Step 1 of 7</span>
+            <div class="wizard-progress-track" role="progressbar" aria-label="Audience selection progress" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1">
               <span id="wizardProgressBar"></span>
             </div>
           </div>
@@ -252,6 +255,14 @@
     $('#pageSub').textContent = v.dataset.sub;
     setNav(false); window.scrollTo(0, 0);
   }
+  var navigationTimer;
+  $$('a[data-go], a[href^="#"]:not([href="#"])').forEach(function (link) {
+    link.addEventListener('click', function () {
+      document.body.classList.add('is-navigating');
+      clearTimeout(navigationTimer);
+      navigationTimer = setTimeout(function () { document.body.classList.remove('is-navigating'); }, 280);
+    });
+  });
   window.addEventListener('hashchange', function () { show(false); });
   show(true);
 
@@ -302,10 +313,11 @@
     var wizardProgressBar = $('#wizardProgressBar'), audienceCompact = $('#audienceCompact');
     var openAudience = $('#openAudience'), audienceValue = $('#audienceValue');
 
-    var stepNames = ['Select Batch', 'Select Year Level', 'Select Course', 'Select Section', 'Select Students', 'Review Selected Recipients'];
+    var stepNames = ['Choose Recipient Mode', 'Select Batch Year', 'Select Course', 'Select Year Level', 'Select Section', 'Select Students', 'Review Recipients'];
     var state = {
+      mode: '',
       batch: '',
-      yearLevelId: '', yearLevelName: '',
+      yearLevelName: '',
       courseId: '', courseCode: '', courseName: '',
       sectionId: '', sectionName: '',
       selectedStudentIds: []
@@ -313,8 +325,7 @@
     var selectedStudents = [];
     var allStudents = [];
     var allBatches = [];
-    var batchGroups = [['2026','2025','2024','2023','2022']];
-    var batchGroupIndex = 0;
+    var activeSummary = null;
     var batchSearchQuery = '';
     var studentSearchQuery = '';
     var currentStep = 0;
@@ -327,11 +338,32 @@
       });
     }
 
+    var activeRequests = 0;
     async function fetchJson(url) {
-      var response = await fetch(url, {credentials:'same-origin', headers:{'Accept':'application/json'}});
-      var result = await response.json();
-      if (!response.ok || !result.ok) throw new Error(result.message || 'The database request failed.');
-      return result;
+      activeRequests++;
+      document.body.classList.add('is-fetching');
+      var controller = new AbortController();
+      var timeout = setTimeout(function () { controller.abort(); }, 30000);
+      try {
+        var response = await fetch(url, {
+          credentials:'same-origin',
+          headers:{'Accept':'application/json'},
+          signal:controller.signal
+        });
+        var result;
+        try { result = await response.json(); }
+        catch (_) { throw new Error('The server returned an invalid response. Please try again.'); }
+        if (!response.ok || !result.ok) throw new Error(result.message || 'The database request failed.');
+        return result;
+      } catch (error) {
+        if (error.name === 'AbortError') throw new Error('The request timed out. Please try again.');
+        if (error instanceof TypeError) throw new Error('The request failed. Check your connection and try again.');
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+        activeRequests--;
+        if (activeRequests === 0) document.body.classList.remove('is-fetching');
+      }
     }
 
     function cardMarkup(value, title, detail, selected, extraClass) {
@@ -343,69 +375,43 @@
 
     function updateProgress() {
       var number = currentStep + 1;
-      wizardProgressLabel.textContent = 'Step ' + number + ' of 6';
-      wizardProgress.setAttribute('aria-valuemax', '6');
+      wizardProgressLabel.textContent = 'Step ' + number + ' of 7';
+      wizardProgress.setAttribute('aria-valuemax', '7');
       wizardProgress.setAttribute('aria-valuenow', String(number));
-      wizardProgressBar.style.width = ((number / 6) * 100) + '%';
+      wizardProgressBar.style.width = ((number / 7) * 100) + '%';
       wizardTitle.textContent = stepNames[currentStep];
     }
 
-    function buildBatchGroups() {
-      batchGroups = [['2026','2025','2024','2023','2022']];
-      var newest = 2021;
-      while (newest >= 1962) {
-        var group = [];
-        for (var i = 0; i < 6 && newest >= 1962; i++, newest--) group.push(String(newest));
-        batchGroups.push(group);
-      }
-      batchGroups.push(['1961','1960','1959']);
-    }
-
     async function loadBatches() {
+      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading enrollment years...</p>';
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
       try {
         var result = await fetchJson('../php-connections/get-student-batches.php');
         allBatches = result.batches.map(String);
-        buildBatchGroups();
+        return true;
       } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty">' + escapeHtml(error.message) + '</p>';
+        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+        return false;
+      } finally {
+        wizardBack.disabled = false;
       }
     }
 
     function renderBatchStep() {
-      wizardInstruction.textContent = 'Choose an enrollment-year batch.';
-      wizardScreen.innerHTML = '<label class="batch-search"><input type="search" id="batchSearch" placeholder="Search enrollment year (1959–2026)" value="' + escapeHtml(batchSearchQuery) + '" aria-label="Search enrollment year"></label>';
+      wizardInstruction.textContent = 'Choose a batch year from student records.';
+      wizardScreen.innerHTML = '<label class="batch-search"><input type="search" id="batchSearch" placeholder="Search batch year" value="' + escapeHtml(batchSearchQuery) + '" aria-label="Search batch year"></label>';
 
       var search = batchSearchQuery.trim();
-      if (search) {
-        var matches = allBatches.filter(function (year) { return year.indexOf(search) !== -1; });
-        var browser = document.createElement('div');
-        browser.className = 'batch-browser search-results';
-        matches.forEach(function (year) {
-          browser.insertAdjacentHTML('beforeend', cardMarkup(year, year, '', state.batch === year, 'batch-card'));
-        });
-        if (!matches.length) browser.innerHTML = '<p class="student-empty">No enrollment year matches your search.</p>';
-        wizardScreen.appendChild(browser);
-        wizardContinue.disabled = !state.batch;
-      } else {
-        var browser = document.createElement('div');
-        browser.className = 'batch-browser';
-        if (batchGroups[batchGroupIndex].length === 6) browser.className += ' batch-six';
-        var left = document.createElement('button');
-        left.type = 'button'; left.className = 'batch-nav'; left.textContent = '‹'; left.setAttribute('aria-label', 'Show older batches');
-        left.dataset.batchLeft = 'true'; left.disabled = batchGroupIndex >= batchGroups.length - 1;
-        browser.appendChild(left);
-
-        batchGroups[batchGroupIndex].forEach(function (year) {
-          browser.insertAdjacentHTML('beforeend', cardMarkup(year, year, '', state.batch === year, 'batch-card'));
-        });
-
-        var right = document.createElement('button');
-        right.type = 'button'; right.className = 'batch-nav'; right.textContent = '›'; right.setAttribute('aria-label', 'Show newer batches');
-        right.dataset.batchRight = 'true'; right.disabled = batchGroupIndex === 0;
-        browser.appendChild(right);
-        wizardScreen.appendChild(browser);
-        wizardContinue.disabled = true;
-      }
+      var matches = allBatches.filter(function (year) { return year.indexOf(search) !== -1; });
+      var browser = document.createElement('div');
+      browser.className = 'batch-browser search-results';
+      matches.forEach(function (year) {
+        browser.insertAdjacentHTML('beforeend', cardMarkup(year, year, '', state.batch === year, 'batch-card'));
+      });
+      if (!matches.length) browser.innerHTML = '<p class="student-empty">No batch years match your search.</p>';
+      wizardScreen.appendChild(browser);
+      wizardContinue.disabled = !state.batch;
 
       $('#batchSearch', wizardScreen).addEventListener('input', function (event) {
         batchSearchQuery = event.target.value.slice(0, 4);
@@ -417,44 +423,79 @@
       updateProgress();
     }
 
-    async function renderYearLevelStep() {
-      wizardInstruction.textContent = 'Choose a year level.';
-      wizardScreen.innerHTML = '<p class="student-empty">Loading year levels...</p>';
+    async function loadActiveSummary() {
+      var result = await fetchJson('../php-connections/get-audience-options.php?kind=active_summary');
+      activeSummary = result.summary;
+    }
+
+    function renderModeStep() {
+      wizardInstruction.textContent = 'Choose the active-student audience or browse all student records, including SAMPLE/demo records.';
+      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading active recipient count...</p>';
       updateProgress();
-      try {
-        var result = await fetchJson('../php-connections/get-audience-options.php?kind=year_levels');
-        wizardScreen.innerHTML = '';
-        result.options.forEach(function (option) {
-          wizardScreen.insertAdjacentHTML('beforeend', cardMarkup(option.id, option.name, '', String(state.yearLevelId) === String(option.id), 'year-choice'));
-        });
-        wizardContinue.disabled = !state.yearLevelId;
-      } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty">' + escapeHtml(error.message) + '</p>';
-      }
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
+      loadActiveSummary().then(function () {
+        wizardScreen.innerHTML =
+          cardMarkup('all_active', 'All Active Batch', activeSummary.eligible_count + ' eligible email recipients · ' + activeSummary.excluded_count + ' excluded without a unique valid email', state.mode === 'all_active', 'recipient-choice') +
+          cardMarkup('selective', 'Select Student Records', 'Choose records from any batch, course, year level, and section, including SAMPLE/demo records.', state.mode === 'selective', 'recipient-choice');
+      }).catch(function (error) {
+        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      }).finally(function () {
+        wizardBack.disabled = false;
+      });
     }
 
     async function renderCourseStep() {
       wizardInstruction.textContent = 'Choose a course.';
-      wizardScreen.innerHTML = '<p class="student-empty">Loading courses...</p>';
+      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading courses...</p>';
       updateProgress();
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
       try {
-        var result = await fetchJson('../php-connections/get-audience-options.php?kind=courses');
+        var result = await fetchJson('../php-connections/get-audience-options.php?kind=courses&batch=' + encodeURIComponent(state.batch));
         wizardScreen.innerHTML = '';
         result.options.forEach(function (option) {
           wizardScreen.insertAdjacentHTML('beforeend', cardMarkup(option.id, option.code, option.name, String(state.courseId) === String(option.id), 'course-choice'));
         });
+        if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No courses are available for this batch.</p>';
         wizardContinue.disabled = !state.courseId;
       } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty">' + escapeHtml(error.message) + '</p>';
+        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      } finally {
+        wizardBack.disabled = false;
+      }
+    }
+
+    async function renderYearLevelStep() {
+      wizardInstruction.textContent = 'Choose a year level available for this batch and course.';
+      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading year levels...</p>';
+      updateProgress();
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
+      try {
+        var url = '../php-connections/get-audience-options.php?kind=year_levels&batch=' + encodeURIComponent(state.batch) + '&course_id=' + encodeURIComponent(state.courseId);
+        var result = await fetchJson(url);
+        wizardScreen.innerHTML = '';
+        result.options.forEach(function (option) {
+          wizardScreen.insertAdjacentHTML('beforeend', cardMarkup(option.name, option.name, '', state.yearLevelName === option.name, 'year-choice'));
+        });
+        if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No year levels are available for this course and batch.</p>';
+        wizardContinue.disabled = !state.yearLevelName;
+      } catch (error) {
+        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      } finally {
+        wizardBack.disabled = false;
       }
     }
 
     async function renderSectionStep() {
-      wizardInstruction.textContent = 'Choose a database section for this course and year level.';
-      wizardScreen.innerHTML = '<p class="student-empty">Loading sections...</p>';
+      wizardInstruction.textContent = 'Choose a section matching this batch, course, and year level.';
+      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading sections...</p>';
       updateProgress();
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
       try {
-        var url = '../php-connections/get-audience-options.php?kind=sections&course_id=' + encodeURIComponent(state.courseId) + '&year_level_id=' + encodeURIComponent(state.yearLevelId);
+        var url = '../php-connections/get-audience-options.php?kind=sections&batch=' + encodeURIComponent(state.batch) + '&course_id=' + encodeURIComponent(state.courseId) + '&year_level=' + encodeURIComponent(state.yearLevelName);
         var result = await fetchJson(url);
         wizardScreen.innerHTML = '';
         result.options.forEach(function (option) {
@@ -463,18 +504,20 @@
         if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No sections are available for this selection.</p>';
         wizardContinue.disabled = !state.sectionId;
       } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty">' + escapeHtml(error.message) + '</p>';
+        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      } finally {
+        wizardBack.disabled = false;
       }
     }
 
     async function renderStudentStep() {
-      wizardInstruction.textContent = 'Search and select matching student records.';
-      wizardScreen.innerHTML = '<div class="student-panel"><div class="student-toolbar"><label class="search-students"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" id="studentSearch" placeholder="Search student" aria-label="Search students"></label><div class="student-tools"><span class="student-selected-count"></span><button type="button" class="text-button select-all-visible">Select all matching students</button><button type="button" class="text-button deselect-all-visible">Deselect all</button><button type="button" class="text-button clear-students">Clear selection</button></div></div><div class="student-results" role="group" aria-label="Matching students"></div></div>';
+      wizardInstruction.textContent = 'Search students in this section and select one or more recipients.';
+      wizardScreen.innerHTML = '<div class="student-panel"><div class="student-toolbar"><label class="search-students"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" id="studentSearch" placeholder="Search student" aria-label="Search students"></label><div class="student-tools"><span class="student-selected-count"></span><button type="button" class="text-button select-all-visible">Select all students</button><button type="button" class="text-button deselect-all-visible">Deselect all</button><button type="button" class="text-button clear-students">Clear selection</button></div></div><div class="student-results" role="group" aria-label="Matching students"></div></div>';
       updateProgress();
       await loadMatchingStudents();
       $('#studentSearch', wizardScreen).addEventListener('input', function (event) {
         studentSearchQuery = event.target.value;
-        loadMatchingStudents();
+        renderStudentRows();
       });
       updateStudentContinue();
     }
@@ -482,20 +525,24 @@
     async function loadMatchingStudents() {
       var results = $('.student-results', wizardScreen);
       if (!results) return;
-      results.innerHTML = '<p class="student-empty">Loading students...</p>';
+      results.innerHTML = '<p class="student-empty loading-message">Loading students...</p>';
+      wizardBack.disabled = true;
+      wizardContinue.disabled = true;
       try {
         var params = new URLSearchParams({
           batch: state.batch,
           course_id: state.courseId,
           year_level: state.yearLevelName,
-          section_id: state.sectionId,
-          search: studentSearchQuery
+          section_id: state.sectionId
         });
         var result = await fetchJson('../php-connections/get-students.php?' + params.toString());
         allStudents = result.students;
         renderStudentRows();
       } catch (error) {
-        results.innerHTML = '<p class="student-empty">' + escapeHtml(error.message) + '</p>';
+        results.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      } finally {
+        wizardBack.disabled = false;
+        updateStudentContinue();
       }
     }
 
@@ -504,21 +551,24 @@
       var count = $('.student-selected-count', wizardScreen);
       if (!results) return;
       count.textContent = state.selectedStudentIds.length + ' selected';
-      if (!allStudents.length) {
+      var matchingStudents = allStudents.filter(function (student) {
+        return String(student.student_name).toLowerCase().indexOf(studentSearchQuery.toLowerCase()) !== -1;
+      });
+      if (!matchingStudents.length) {
         results.innerHTML = '<p class="student-empty">No students match these filters.</p>';
         updateStudentContinue();
         return;
       }
-      results.innerHTML = allStudents.map(function (student) {
+      results.innerHTML = matchingStudents.map(function (student) {
         var id = String(student.id);
         var selected = state.selectedStudentIds.indexOf(id) !== -1;
         var initials = String(student.student_name).split(/\s+/).map(function (part) { return part.charAt(0); }).slice(0,2).join('');
-        var emailStatus = student.email && Number(student.email_verified) === 1 ? 'Verified email available' : 'SAMPLE — no email address';
+        var emailStatus = student.has_valid_email ? 'Valid email available' : 'No valid email; excluded when publishing';
         return '<label class="student-row' + (selected ? ' is-selected' : '') + '">' +
           '<input type="checkbox" class="student-checkbox" value="' + escapeHtml(id) + '"' + (selected ? ' checked' : '') + '>' +
           '<span class="student-avatar" aria-hidden="true">' + escapeHtml(initials) + '</span>' +
-          '<span class="student-info"><strong>' + escapeHtml(student.student_name) + '</strong><small>Record ID: ' + escapeHtml(id) + ' · ' + escapeHtml(student.course_code) + ' · ' + escapeHtml(student.section_name) + '</small>' +
-          '<span class="recipient-email-status' + (student.email ? '' : ' none') + '">' + escapeHtml(emailStatus) + '</span></span>' +
+          '<span class="student-info"><strong>' + escapeHtml(student.student_name) + '</strong><small>' + escapeHtml(student.course_code) + ' · ' + escapeHtml(student.section_name) + '</small>' +
+          '<span class="recipient-email-status' + (student.has_valid_email ? '' : ' none') + '">' + escapeHtml(emailStatus) + '</span></span>' +
           '<span class="student-check" aria-hidden="true">✓</span></label>';
       }).join('');
       updateStudentContinue();
@@ -530,36 +580,48 @@
 
     function renderReview() {
       var chosen = selectedStudents;
-      var verified = chosen.filter(function (student) { return student.email && Number(student.email_verified) === 1; }).length;
-      var withoutEmail = chosen.filter(function (student) { return !student.email; }).length;
-      var sampleCount = chosen.filter(function (student) { return Number(student.is_sample) === 1 || student.student_status === 'SAMPLE'; }).length;
+      if (state.mode === 'all_active') {
+        wizardInstruction.textContent = 'Review all active students before confirming this audience.';
+        wizardScreen.innerHTML = '<div class="review-count-grid">' +
+          '<div class="review-count"><strong>' + activeSummary.active_student_count + '</strong><span>Active student records</span></div>' +
+          '<div class="review-count"><strong>' + activeSummary.eligible_count + '</strong><span>Eligible unique email recipients</span></div>' +
+          '<div class="review-count"><strong>' + activeSummary.excluded_count + '</strong><span>Excluded invalid or duplicate emails</span></div></div>' +
+          '<div class="audience-summary"><div class="summary-row"><b>Audience</b><span>All active students across all batches, courses, year levels, and sections</span></div>' +
+          '<p class="demo-warning">No emails are sent during recipient selection.</p></div>';
+        updateProgress();
+        wizardContinue.disabled = activeSummary.eligible_count === 0;
+        return;
+      }
+
+      var withEmail = chosen.filter(function (student) { return student.has_valid_email; }).length;
+      var withoutEmail = chosen.length - withEmail;
       wizardInstruction.textContent = 'Review the selected recipient records.';
       wizardScreen.innerHTML = '<div class="review-count-grid">' +
         '<div class="review-count"><strong>' + chosen.length + '</strong><span>Selected student records</span></div>' +
-        '<div class="review-count"><strong>' + verified + '</strong><span>Available verified emails</span></div>' +
-        '<div class="review-count"><strong>' + withoutEmail + '</strong><span>Without email addresses</span></div>' +
-        '<div class="review-count"><strong>' + sampleCount + '</strong><span>Sample/test records</span></div></div>' +
+        '<div class="review-count"><strong>' + withEmail + '</strong><span>Records with valid email</span></div>' +
+        '<div class="review-count"><strong>' + withoutEmail + '</strong><span>Excluded without valid email</span></div></div>' +
         '<div class="audience-summary">' +
         '<div class="summary-row"><b>Batch</b><span>' + escapeHtml(state.batch) + '</span></div>' +
         '<div class="summary-row"><b>Year Level</b><span>' + escapeHtml(state.yearLevelName) + '</span></div>' +
         '<div class="summary-row"><b>Course</b><span>' + escapeHtml(state.courseCode) + ' — ' + escapeHtml(state.courseName) + '</span></div>' +
         '<div class="summary-row"><b>Section</b><span>' + escapeHtml(state.sectionName) + '</span></div>' +
         '<div class="summary-row"><b>Selected</b><span>' + chosen.map(function (student) { return escapeHtml(student.student_name); }).join(', ') + '</span></div>' +
-        '<p class="demo-warning">No emails are sent from this review screen.</p></div>';
+        '<p class="demo-warning">No emails are sent during recipient selection. Duplicate email addresses are deduplicated at publish time.</p></div>';
       updateProgress();
       wizardContinue.disabled = chosen.length === 0;
     }
 
     function renderWizard(animate) {
       wizardScreen.classList.remove('is-leaving');
-      if (currentStep === 0) renderBatchStep();
-      if (currentStep === 1) renderYearLevelStep();
+      if (currentStep === 0) renderModeStep();
+      if (currentStep === 1) renderBatchStep();
       if (currentStep === 2) renderCourseStep();
-      if (currentStep === 3) renderSectionStep();
-      if (currentStep === 4) renderStudentStep();
-      if (currentStep === 5) renderReview();
+      if (currentStep === 3) renderYearLevelStep();
+      if (currentStep === 4) renderSectionStep();
+      if (currentStep === 5) renderStudentStep();
+      if (currentStep === 6) renderReview();
       wizardBack.textContent = currentStep === 0 ? 'Cancel' : 'Back';
-      wizardContinue.textContent = currentStep === 5 ? 'Confirm selection' : 'Continue';
+      wizardContinue.textContent = currentStep === 6 ? 'Confirm selection' : 'Continue';
       if (animate) {
         wizardScreen.classList.remove('is-entering');
         void wizardScreen.offsetWidth;
@@ -568,11 +630,11 @@
     }
 
     function clearAfter(step) {
-      if (step <= 0) { state.batch = ''; batchSearchQuery = ''; }
-      if (step <= 1) { state.yearLevelId = ''; state.yearLevelName = ''; }
+      if (step <= 1) { state.batch = ''; batchSearchQuery = ''; }
       if (step <= 2) { state.courseId = ''; state.courseCode = ''; state.courseName = ''; }
-      if (step <= 3) { state.sectionId = ''; state.sectionName = ''; }
-      if (step <= 4) { state.selectedStudentIds = []; selectedStudents = []; }
+      if (step <= 3) state.yearLevelName = '';
+      if (step <= 4) { state.sectionId = ''; state.sectionName = ''; }
+      if (step <= 5) { state.selectedStudentIds = []; selectedStudents = []; allStudents = []; }
       audienceConfirmed = false;
       audienceValue.value = '';
     }
@@ -582,7 +644,11 @@
       openAudience.hidden = false;
       openAudience.textContent = audienceConfirmed ? 'Change audience' : 'Choose audience';
       if (audienceConfirmed) {
-        audienceCompact.innerHTML = '<span><strong>' + escapeHtml(state.batch) + ' · ' + escapeHtml(state.yearLevelName) + ' · ' + escapeHtml(state.courseCode) + '</strong><small>' + escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected records</small></span><button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
+        var audienceTitle = state.mode === 'all_active' ? 'All active students' : escapeHtml(state.batch) + ' · ' + escapeHtml(state.courseCode) + ' · ' + escapeHtml(state.yearLevelName);
+        var audienceDetail = state.mode === 'all_active'
+          ? activeSummary.eligible_count + ' eligible email recipients · ' + activeSummary.excluded_count + ' excluded'
+          : escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected students';
+        audienceCompact.innerHTML = '<span><strong>' + audienceTitle + '</strong><small>' + audienceDetail + '</small></span><button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
         audienceCompact.hidden = false;
         $('#editAudience', audienceCompact).addEventListener('click', function () {
           currentStep = 0;
@@ -599,17 +665,11 @@
     openAudience.addEventListener('click', function () {
       wizard.hidden = false;
       openAudience.hidden = true;
-      if (!allBatches.length) loadBatches().then(function () { renderWizard(true); });
-      else renderWizard(true);
+      renderWizard(true);
     });
 
     wizardScreen.addEventListener('click', function (event) {
       if (transitionBusy) return;
-      var left = event.target.closest('[data-batch-left]');
-      if (left) { if (batchGroupIndex < batchGroups.length - 1) batchGroupIndex++; renderBatchStep(); return; }
-      var right = event.target.closest('[data-batch-right]');
-      if (right) { if (batchGroupIndex > 0) batchGroupIndex--; renderBatchStep(); return; }
-
       var choice = event.target.closest('[data-choice]');
       if (!choice) {
         var checkbox = event.target.closest('.student-checkbox');
@@ -640,11 +700,38 @@
 
       var value = choice.dataset.choice;
       if (currentStep === 0) {
-        clearAfter(0); state.batch = value; batchSearchQuery = ''; currentStep = 1; renderWizard(true); return;
+        var selectedMode = value === 'all_active' ? 'all_active' : 'selective';
+        if (state.mode !== selectedMode) clearAfter(1);
+        state.mode = selectedMode;
+        audienceConfirmed = false;
+        audienceValue.value = '';
+        audienceCompact.hidden = true;
+        if (value === 'all_active') {
+          if (!activeSummary) {
+            wizardContinue.disabled = true;
+            wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading active recipient count...</p>';
+            loadActiveSummary().then(function () { currentStep = 6; renderWizard(true); }).catch(function (error) {
+              wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+            });
+          } else {
+            currentStep = 6;
+            renderWizard(true);
+          }
+          return;
+        }
+        wizardContinue.disabled = true;
+        if (!allBatches.length) {
+          loadBatches().then(function (loaded) {
+            if (loaded) { currentStep = 1; renderWizard(true); }
+          });
+        } else {
+          currentStep = 1;
+          renderWizard(true);
+        }
+        return;
       }
       if (currentStep === 1) {
-        clearAfter(1); state.yearLevelId = value;
-        var label = choice.querySelector('strong'); state.yearLevelName = label ? label.textContent : '';
+        clearAfter(1); state.batch = value;
         currentStep = 2; renderWizard(true); return;
       }
       if (currentStep === 2) {
@@ -654,45 +741,95 @@
         currentStep = 3; renderWizard(true); return;
       }
       if (currentStep === 3) {
-        clearAfter(3); state.sectionId = value;
-        var sectionLabel = choice.querySelector('strong'); state.sectionName = sectionLabel ? sectionLabel.textContent : '';
+        clearAfter(3); state.yearLevelName = value;
         currentStep = 4; renderWizard(true); return;
+      }
+      if (currentStep === 4) {
+        clearAfter(4); state.sectionId = value;
+        var sectionLabel = choice.querySelector('strong'); state.sectionName = sectionLabel ? sectionLabel.textContent : '';
+        currentStep = 5; renderWizard(true); return;
+      }
+    });
+
+    $('#announcementForm').addEventListener('submit', async function (event) {
+      if (!event.submitter || event.submitter.value !== 'submit') return;
+      event.preventDefault();
+      var announcementStatus = $('#announcementStatus');
+      if (!audienceConfirmed || !audienceValue.value) {
+        announcementStatus.textContent = 'Choose and confirm recipients before publishing.';
+        announcementStatus.hidden = false;
+        return;
+      }
+      if (oc.checked || dc.checked) {
+        announcementStatus.textContent = 'Student emails are not sent while approval steps are pending. Publish the announcement after approval.';
+        announcementStatus.hidden = false;
+        return;
+      }
+      if (!this.reportValidity()) return;
+
+      var publishButton = event.submitter;
+      publishButton.disabled = true;
+      announcementStatus.textContent = 'Publishing announcement and sending email...';
+      announcementStatus.hidden = false;
+      try {
+        var publishData = new FormData(this);
+        publishData.set('action', 'publish');
+        var response = await fetch('../php-connections/publish-announcement.php', {
+          method:'POST',
+          credentials:'same-origin',
+          headers:{'Accept':'application/json'},
+          body:publishData
+        });
+        var result;
+        try { result = await response.json(); }
+        catch (_) { throw new Error('The server returned an invalid response. Please try again.'); }
+        if (!response.ok || !result.ok) {
+          var message = result.message || 'The announcement could not be published.';
+          if (typeof result.excluded_count === 'number') message += ' Excluded recipients: ' + result.excluded_count + '.';
+          if (typeof result.sent_count === 'number') message += ' Emails sent before the failure: ' + result.sent_count + '.';
+          throw new Error(message);
+        }
+        announcementStatus.textContent = 'Announcement published. Emails sent: ' + result.sent_count + '. Recipients excluded for invalid or duplicate email: ' + result.excluded_count + '.';
+      } catch (error) {
+        announcementStatus.textContent = error instanceof TypeError
+          ? 'The request failed. Check your connection and try again.'
+          : error.message;
+        publishButton.disabled = false;
       }
     });
 
     wizardBack.addEventListener('click', function () {
       if (currentStep === 0) { closeWizard(); return; }
       currentStep--;
-      if (currentStep === 3) state.sectionId = '';
-      if (currentStep === 4) state.selectedStudentIds = [];
       renderWizard(true);
     });
 
     wizardContinue.addEventListener('click', function () {
       if (wizardContinue.disabled) return;
-      if (currentStep === 0) {
+      if (currentStep === 1) {
         if (!state.batch) return;
-        currentStep = 1;
-      } else if (currentStep === 1) {
-        if (!state.yearLevelId) return;
         currentStep = 2;
       } else if (currentStep === 2) {
         if (!state.courseId) return;
         currentStep = 3;
       } else if (currentStep === 3) {
-        if (!state.sectionId) return;
+        if (!state.yearLevelName) return;
         currentStep = 4;
       } else if (currentStep === 4) {
-        if (!state.selectedStudentIds.length) return;
-        selectedStudents = allStudents.filter(function (student) { return state.selectedStudentIds.indexOf(String(student.id)) !== -1; });
+        if (!state.sectionId) return;
         currentStep = 5;
       } else if (currentStep === 5) {
+        if (!state.selectedStudentIds.length) return;
+        selectedStudents = allStudents.filter(function (student) { return state.selectedStudentIds.indexOf(String(student.id)) !== -1; });
+        currentStep = 6;
+      } else if (currentStep === 6) {
         audienceValue.value = JSON.stringify({
-          batch: state.batch,
-          year_level: state.yearLevelName,
-          course_id: Number(state.courseId),
-          section_id: Number(state.sectionId),
-          student_ids: state.selectedStudentIds.map(function (id) { return Number(id); })
+          mode: state.mode,
+          batch: state.mode === 'selective' ? Number(state.batch) : null,
+          year_level: state.mode === 'selective' ? state.yearLevelName : null,
+          course_id: state.mode === 'selective' ? Number(state.courseId) : null,
+          section_id: state.mode === 'selective' ? Number(state.sectionId) : null,
+          student_ids: state.mode === 'selective' ? state.selectedStudentIds.map(function (id) { return Number(id); }) : []
         });
         audienceConfirmed = true;
         closeWizard();

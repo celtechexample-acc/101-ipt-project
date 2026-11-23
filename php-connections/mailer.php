@@ -6,18 +6,16 @@ use PHPMailer\PHPMailer\PHPMailer;
 require_once __DIR__ . '/../PHPMailer-master/PHPMailer-master/src/Exception.php';
 require_once __DIR__ . '/../PHPMailer-master/PHPMailer-master/src/PHPMailer.php';
 require_once __DIR__ . '/../PHPMailer-master/PHPMailer-master/src/SMTP.php';
-function send_password_reset_email(string $recipient, string $otp): void
+
+function osa_create_mailer(): PHPMailer
 {
-    // Read credentials from Windows, Codespaces, or Apache.
     $readConfig = static function (string $name): string|false {
-        // Windows and GitHub Codespaces environment variables
         $value = getenv($name);
 
         if (is_string($value) && $value !== '') {
             return $value;
         }
 
-        // Apache environment variables from XAMPP
         if (function_exists('apache_getenv')) {
             $value = apache_getenv($name);
 
@@ -26,7 +24,6 @@ function send_password_reset_email(string $recipient, string $otp): void
             }
         }
 
-        // Additional PHP environment fallbacks
         $value = $_SERVER[$name] ?? $_ENV[$name] ?? false;
 
         return is_string($value) && $value !== '' ? $value : false;
@@ -56,6 +53,12 @@ function send_password_reset_email(string $recipient, string $otp): void
     $mail->CharSet = 'UTF-8';
 
     $mail->setFrom(trim($senderAddress), 'CELTECH Office of Student Affairs');
+    return $mail;
+}
+
+function send_password_reset_email(string $recipient, string $otp): void
+{
+    $mail = osa_create_mailer();
     $mail->addAddress($recipient);
     $mail->isHTML(true);
 
@@ -77,5 +80,24 @@ function send_password_reset_email(string $recipient, string $otp): void
         . "This code expires in 10 minutes. Do not share it with anyone.\n"
         . "If you did not request a password reset, you can safely ignore this email.\n";
 
+    $mail->send();
+}
+
+function send_announcement_email(string $recipient, string $title, string $details): void
+{
+    $mail = osa_create_mailer();
+    $mail->addAddress($recipient);
+    $mail->isHTML(true);
+    $mail->Subject = 'CELTECH OSA - ' . str_replace(["\r", "\n"], ' ', $title);
+    $escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $escapedDetails = nl2br(htmlspecialchars($details, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+    $mail->Body = '<!doctype html><html lang="en"><body style="margin:0;padding:24px;background:#f2faf5;font-family:Arial,sans-serif;color:#0d1f17">'
+        . '<table role="presentation" style="max-width:640px;margin:0 auto;background:#fff;border-radius:16px;padding:32px">'
+        . '<tr><td><p style="margin:0 0 8px;color:#166a42;font-weight:bold">CELTECH COLLEGE OLONGAPO</p>'
+        . '<h1 style="font-size:22px;margin:0 0 20px">Office of Student Affairs</h1>'
+        . '<h2 style="font-size:18px">' . $escapedTitle . '</h2><p>' . $escapedDetails . '</p>'
+        . '<p style="margin-top:28px;color:#5b6e64">CELTECH Office of Student Affairs</p></td></tr></table></body></html>';
+    $mail->AltBody = "CELTECH COLLEGE OLONGAPO - Office of Student Affairs\n\n"
+        . $title . "\n\n" . $details . "\n";
     $mail->send();
 }

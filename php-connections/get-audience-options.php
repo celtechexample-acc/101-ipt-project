@@ -15,8 +15,10 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+require_once __DIR__ . '/announcement-recipient-common.php';
+
 $kind = is_string($_GET['kind'] ?? null) ? $_GET['kind'] : '';
-$allowedKinds = ['year_levels', 'courses', 'sections'];
+$allowedKinds = ['courses', 'year_levels', 'sections', 'active_summary'];
 if (!in_array($kind, $allowedKinds, true)) {
     http_response_code(422);
     header('Content-Type: application/json; charset=utf-8');
@@ -25,45 +27,89 @@ if (!in_array($kind, $allowedKinds, true)) {
 }
 
 $options = [];
-if ($kind === 'year_levels') {
-    $options = $db->query('
-        SELECT id, name
-        FROM year_levels
-        ORDER BY sort_order ASC
-    ')->fetchAll();
+if ($kind === 'active_summary') {
+    $activeStudents = announcement_fetch_active_students($db);
+    $summary = announcement_recipient_summary($activeStudents);
+    $options = [
+        'eligible_count' => count($summary['recipients']),
+        'active_student_count' => count($activeStudents),
+        'excluded_count' => $summary['excluded_count'],
+    ];
 } elseif ($kind === 'courses') {
-    $options = $db->query('
-        SELECT id, code, name
-        FROM courses
-        WHERE is_active = 1
-        ORDER BY code ASC
-    ')->fetchAll();
-} else {
-    $courseId = filter_var($_GET['course_id'] ?? null, FILTER_VALIDATE_INT);
-    $yearLevelId = filter_var($_GET['year_level_id'] ?? null, FILTER_VALIDATE_INT);
-    if ($courseId === false || $courseId < 1 || $yearLevelId === false || $yearLevelId < 1) {
+    $batch = filter_var($_GET['batch'] ?? null, FILTER_VALIDATE_INT);
+    if ($batch === false || $batch < 1) {
         http_response_code(422);
         header('Content-Type: application/json; charset=utf-8');
-        echo json_encode(['ok' => false, 'message' => 'Select a valid course and year level.'], JSON_THROW_ON_ERROR);
+        echo json_encode(['ok' => false, 'message' => 'Select a valid batch year.'], JSON_THROW_ON_ERROR);
         exit;
     }
 
     $stmt = $db->prepare('
-        SELECT s.id, s.name
-        FROM sections s
+        SELECT DISTINCT c.id, c.code, c.name
+        FROM students s
         JOIN courses c ON c.id = s.course_id
-        WHERE s.is_active = 1
+        WHERE s.enrollment_year = :batch
+        ORDER BY c.code ASC
+    ');
+    $stmt->execute([':batch' => $batch]);
+    $options = $stmt->fetchAll();
+} elseif ($kind === 'year_levels') {
+    $batch = filter_var($_GET['batch'] ?? null, FILTER_VALIDATE_INT);
+    $courseId = filter_var($_GET['course_id'] ?? null, FILTER_VALIDATE_INT);
+    if ($batch === false || $batch < 1 || $courseId === false || $courseId < 1) {
+        http_response_code(422);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'message' => 'Select a valid batch year and course.'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    $stmt = $db->prepare('
+        SELECT DISTINCT s.year_level AS name
+        FROM students s
+        JOIN courses c ON c.id = s.course_id
+        WHERE s.enrollment_year = :batch
           AND s.course_id = :course_id
-          AND s.year_level_id = :year_level_id
-        ORDER BY s.name ASC
+        ORDER BY s.year_level ASC
     ');
     $stmt->execute([
+        ':batch' => $batch,
         ':course_id' => $courseId,
-        ':year_level_id' => $yearLevelId,
+    ]);
+    $options = $stmt->fetchAll();
+} else {
+    $batch = filter_var($_GET['batch'] ?? null, FILTER_VALIDATE_INT);
+    $courseId = filter_var($_GET['course_id'] ?? null, FILTER_VALIDATE_INT);
+    $yearLevel = trim(is_string($_GET['year_level'] ?? null) ? $_GET['year_level'] : '');
+    if ($batch === false || $batch < 1 || $courseId === false || $courseId < 1 || $yearLevel === '') {
+        http_response_code(422);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['ok' => false, 'message' => 'Select a valid batch, course, and year level.'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    $stmt = $db->prepare('
+        SELECT DISTINCT sec.id, sec.name
+        FROM students s
+        JOIN courses c ON c.id = s.course_id
+        JOIN sections sec ON sec.id = s.section_id
+        WHERE s.enrollment_year = :batch
+          AND s.course_id = :course_id
+          AND s.year_level = :year_level
+        ORDER BY sec.name ASC
+    ');
+    $stmt->execute([
+        ':batch' => $batch,
+        ':course_id' => $courseId,
+        ':year_level' => $yearLevel,
     ]);
     $options = $stmt->fetchAll();
 }
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');
-echo json_encode(['ok' => true, 'options' => $options], JSON_THROW_ON_ERROR);
+echo json_encode(
+    $kind === 'active_summary'
+        ? ['ok' => true, 'summary' => $options]
+        : ['ok' => true, 'options' => $options],
+    JSON_THROW_ON_ERROR
+);

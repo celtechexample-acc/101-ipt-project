@@ -28,5 +28,5 @@ if (ini_get('session.use_cookies')) {
 }
 session_destroy();
 
-header('Location: ../portals/Ossa-login.php');
+header('Location: ../portals/Ossa-login.php?logged_out=1');
 exit;

@@ -15,6 +15,8 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+require_once __DIR__ . '/announcement-recipient-common.php';
+
 $batch = filter_var($_GET['batch'] ?? null, FILTER_VALIDATE_INT);
 $courseId = filter_var($_GET['course_id'] ?? null, FILTER_VALIDATE_INT);
 $sectionId = filter_var($_GET['section_id'] ?? null, FILTER_VALIDATE_INT);
@@ -22,10 +24,10 @@ $yearLevel = trim(is_string($_GET['year_level'] ?? null) ? $_GET['year_level'] :
 $search = trim(is_string($_GET['search'] ?? null) ? $_GET['search'] : '');
 $search = substr($search, 0, 100);
 
-if ($batch === false || $batch < 1959 || $batch > 2026
+if ($batch === false || $batch < 1
     || $courseId === false || $courseId < 1
     || $sectionId === false || $sectionId < 1
-    || !in_array($yearLevel, ['1st Year', '2nd Year', '3rd Year', '4th Year'], true)) {
+    || $yearLevel === '' || strlen($yearLevel) > 100) {
     http_response_code(422);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => false, 'message' => 'Invalid student filters.'], JSON_THROW_ON_ERROR);
@@ -33,18 +35,8 @@ if ($batch === false || $batch < 1959 || $batch > 2026
 }
 
 $stmt = $db->prepare('
-    SELECT
-        s.id,
-        s.student_name,
-        s.enrollment_year,
-        s.year_level,
-        s.email,
-        s.email_verified,
-        s.student_status,
-        s.is_sample,
-        c.code AS course_code,
-        c.name AS course_name,
-        sec.name AS section_name
+    SELECT s.id, s.student_name, s.enrollment_year, s.year_level,
+           s.email, c.code AS course_code, sec.name AS section_name
     FROM students s
     JOIN courses c ON c.id = s.course_id
     JOIN sections sec ON sec.id = s.section_id
@@ -52,9 +44,8 @@ $stmt = $db->prepare('
       AND s.course_id = :course_id
       AND s.year_level = :year_level
       AND s.section_id = :section_id
-      AND (:search = "" OR s.student_name LIKE :search_like OR CAST(s.id AS TEXT) LIKE :search_like)
+      AND (:search = "" OR s.student_name LIKE :search_like)
     ORDER BY s.student_name ASC
-    LIMIT 500
 ');
 $stmt->execute([
     ':batch' => $batch,
@@ -64,7 +55,16 @@ $stmt->execute([
     ':search' => $search,
     ':search_like' => '%' . $search . '%',
 ]);
-$students = $stmt->fetchAll();
+$students = array_map(static function (array $student): array {
+    $email = trim(is_string($student['email'] ?? null) ? $student['email'] : '');
+    return [
+        'id' => (int) $student['id'],
+        'student_name' => $student['student_name'],
+        'course_code' => $student['course_code'],
+        'section_name' => $student['section_name'],
+        'has_valid_email' => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
+    ];
+}, $stmt->fetchAll());
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');

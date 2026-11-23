@@ -16,22 +16,18 @@ if (!isset($_SESSION['user_id'])) {
 }
 
 $search = trim(is_string($_GET['search'] ?? null) ? $_GET['search'] : '');
-$search = substr($search, 0, 4);
+$search = substr($search, 0, 20);
 $stmt = $db->prepare('
     SELECT DISTINCT enrollment_year
     FROM students
-    WHERE enrollment_year BETWEEN 1959 AND 2026
-      AND (:search = "" OR CAST(enrollment_year AS TEXT) LIKE :search_like)
+    WHERE (:search = "" OR CAST(enrollment_year AS TEXT) LIKE :search_like)
     ORDER BY enrollment_year DESC
 ');
 $stmt->execute([
     ':search' => $search,
     ':search_like' => '%' . $search . '%',
 ]);
-$years = array_map(
-    static fn(array $row): int => (int) $row['enrollment_year'],
-    $stmt->fetchAll()
-);
+$years = array_map(static fn(array $row): int => (int) $row['enrollment_year'], $stmt->fetchAll());
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');

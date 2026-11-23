@@ -10,18 +10,23 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 if (!csrf_token_is_valid()) {
-    http_response_code(400);
-    exit('Your form session expired. Return to registration and try again.');
+    header('Location: ../portals/Ossa-login.php?error=setup_csrf');
+    exit;
 }
 
 $name = trim(is_string($_POST['name'] ?? null) ? $_POST['name'] : '');
 $email = trim(is_string($_POST['email'] ?? null) ? $_POST['email'] : '');
 $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
+$confirmation = is_string($_POST['password_confirmation'] ?? null) ? $_POST['password_confirmation'] : '';
 
 function redirect_to_registration(string $error, string $name = '', string $email = ''): never
 {
-    $query = http_build_query(['error' => $error, 'name' => $name, 'email' => $email]);
-    header('Location: ../portals/register.php?' . $query);
+    $query = http_build_query([
+        'error' => 'setup_' . $error,
+        'name' => substr($name, 0, 100),
+        'email' => substr($email, 0, 254),
+    ]);
+    header('Location: ../portals/Ossa-login.php?' . $query);
     exit;
 }
 
@@ -29,35 +34,47 @@ if ($name === '' || strlen($name) > 100) {
     redirect_to_registration('name', $name, $email);
 }
 
-if (strlen($email) > 254 || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+if (strlen($email) > 254
+    || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+    || strtolower(substr($email, strrpos($email, '@') + 1)) !== 'gmail.com') {
     redirect_to_registration('email', $name, $email);
 }
 
 if (strlen($password) < 8 || strlen($password) > 4096) {
     redirect_to_registration('password', $name, $email);
 }
+if (!hash_equals($password, $confirmation)) {
+    redirect_to_registration('confirmation', $name, $email);
+}
 
 try {
+    begin_sqlite_immediate($db);
+    if ((int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn() !== 0) {
+        $db->rollBack();
+        header('Location: ../portals/Ossa-login.php?error=setup_completed');
+        exit;
+    }
+
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+    if (!is_string($passwordHash)) {
+        throw new RuntimeException('Could not securely hash the administrator password.');
+    }
     $stmt = $db->prepare('INSERT INTO users (name, email, password) VALUES (:name, :email, :password)');
     $stmt->execute([
         ':name' => $name,
         ':email' => $email,
-        ':password' => password_hash($password, PASSWORD_DEFAULT),
+        ':password' => $passwordHash,
     ]);
-
-    session_regenerate_id(true);
-    $_SESSION['user_id'] = (int) $db->lastInsertId();
-    $_SESSION['user_name'] = $name;
-    $_SESSION['session_version'] = 0;
-    header('Location: ../dashboard/osa-dashboard.php');
-    exit;
-} catch (PDOException $e) {
-    if (str_contains(strtolower($e->getMessage()), 'unique constraint failed')) {
-        redirect_to_registration('exists', $name, $email);
+    $db->commit();
+} catch (Throwable $e) {
+    if ($db->inTransaction()) {
+        $db->rollBack();
     }
-
     error_log($e->getMessage());
     http_response_code(500);
     exit('Something went wrong while creating your account. Please try again later.');
 }
+
+header('Location: ../portals/Ossa-login.php?registered=1');
+exit;
 ?>
