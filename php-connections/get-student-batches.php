@@ -8,10 +8,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
     exit('Method not allowed.');
 }
-if (!isset($_SESSION['user_id'])) {
+if (!isset($_SESSION['user_id']) || !is_osa_admin($db)) {
     http_response_code(401);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['ok' => false, 'message' => 'Please log in.'], JSON_THROW_ON_ERROR);
+    echo json_encode(['ok' => false, 'message' => 'Please log in to the OSA Admin account.'], JSON_THROW_ON_ERROR);
     exit;
 }
 

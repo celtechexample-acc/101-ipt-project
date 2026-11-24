@@ -35,7 +35,13 @@ if ($ipRemaining > 0) {
     exit;
 }
 
-$stmt = $db->prepare('SELECT id, name, password, session_version FROM users WHERE email = :email COLLATE NOCASE LIMIT 1');
+$stmt = $db->prepare('
+    SELECT id, name, password, session_version
+    FROM users
+    WHERE email = :email COLLATE NOCASE
+      AND id = (SELECT MIN(id) FROM users)
+    LIMIT 1
+');
 $stmt->execute([':email' => $email]);
 $user = $stmt->fetch();
 

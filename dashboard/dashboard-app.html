@@ -22,24 +22,12 @@
     <!-- opens the modal instead of a page -->
     
 
-    <div class="grp">Requests</div>
-    <a href="#teacher" data-go="teacher">Teacher requests <span class="count"></span></a>
-    <a href="#office" data-go="office">Office requests <span class="count"></span></a>
-
-    <div class="grp">Workflow</div>
     <a href="#drafts" data-go="drafts">Drafts <span class="count"></span></a>
-    <a href="#confirm" data-go="confirm">Office confirmation <span class="count"></span></a>
-    <a href="#director" data-go="director">Director approval <span class="count"></span></a>
-    <a href="#returned" data-go="returned">Returned for corrections <span class="count"></span></a>
-
-    <div class="grp">Records</div>
-    <a href="#published" data-go="published">Published</a>
-    <a href="#cancelled" data-go="cancelled">Cancelled / suspended</a>
+    <a href="#published" data-go="published">History</a>
   </nav>
 
   <div class="spacer"></div>
   <nav aria-label="Account">
-    <a href="#settings" data-go="settings">Settings</a>
     <a href="#" class="logout">Log out</a>
   </nav>
 </aside>
@@ -52,112 +40,64 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <div class="tools" style="order:2">
-        <button class="icon-btn" type="button" aria-label="Notifications">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
-          <span class="dot"></span>
-        </button>
-        <a class="user" href="#"><span class="avatar">OS</span><div><b>OSA Staff</b><small>Office of Student Affairs</small></div></a>
+        <div class="user"><span class="avatar">OS</span><div><b>OSA Admin</b><small>Office of Student Affairs</small></div></div>
       </div>
-      <form class="search" action="#" role="search" style="order:1">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="search" placeholder="Search announcements or requests" aria-label="Search">
-      </form>
     </div>
     <div class="hero">
       <div><small>OSA DASHBOARD</small><h1 id="pageTitle">Welcome back</h1><p id="pageSub">Choose an action to get started.</p></div>
       <div class="acts">
         <a class="btn light" href="#" data-modal>Create announcement</a>
-        <a class="btn line" href="#teacher">Review requests</a>
+        <a class="btn line" href="#published">Announcement history</a>
       </div>
     </div>
   </header>
 
   <!-- ============ VIEW: DASHBOARD ============ -->
-  <div class="view stack" id="v-dashboard" data-title="Welcome back" data-sub="Choose an action to get started.">
+  <div class="view stack" id="v-dashboard" data-title="Welcome back" data-sub="Manage OSA announcements and review email delivery results.">
+    <p class="hint" id="dashboardStatus" role="status" aria-live="polite" hidden></p>
     <div class="cards">
-      <a class="card panel" href="#teacher"><span>Teacher requests</span><strong></strong><em>Review requests</em></a>
-      <a class="card panel" href="#office"><span>Office requests</span><strong></strong><em>Review requests</em></a>
-      <a class="card panel" href="#drafts"><span>Drafts</span><strong></strong><em>Continue editing</em></a>
-      <a class="card panel" href="#confirm"><span>Office confirmation</span><strong></strong><em>View previews sent</em></a>
-      <a class="card panel" href="#director"><span>Director approval</span><strong></strong><em>Open approvals</em></a>
-      <a class="card panel" href="#returned"><span>Returned for corrections</span><strong></strong><em>Revise announcements</em></a>
-      <a class="card panel" href="#published"><span>Published today</span><strong></strong><em>View history</em></a>
-      <a class="card panel" href="#cancelled"><span>Cancelled / suspended</span><strong></strong><em>View records</em></a>
+      <a class="card panel" href="#drafts"><span>Saved drafts</span><strong id="draftCount">0</strong><em>Continue editing announcements</em></a>
+      <a class="card panel" href="#published"><span>Announcement history</span><strong id="announcementCount">0</strong><em>Review publishing and delivery results</em></a>
     </div>
 
-    <section class="panel" aria-labelledby="nr">
-      <div class="sec-head"><h2 id="nr">Needs your review</h2><a href="#teacher">See all requests</a></div>
-      <div class="empty box"><b>Nothing waiting for review</b>New teacher and office requests will show up here.</div>
-    </section>
-
     <section class="panel" aria-labelledby="ah">
-      <div class="sec-head"><h2 id="ah">Announcement history</h2><button class="btn ghost sm" type="button">Export list</button></div>
+      <div class="sec-head"><h2 id="ah">Announcement history</h2></div>
       <div class="scroll"><table>
-        <thead><tr><th>Title</th><th>Audience</th><th>Date</th><th>Status</th><th>Emailed</th><th>Failed</th><th>Notified</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Title</th><th>Audience</th><th>Date</th><th>Status</th><th>Sent</th><th>Failed</th><th>Recipients</th><th>Actions</th></tr></thead>
         <tbody><tr><td colspan="8" class="empty"><b>No announcements yet</b>Create one to notify students or offices.</td></tr></tbody>
       </table></div>
       <div class="legend" aria-label="Status guide">
-        <span class="badge">Draft</span><span class="badge">Awaiting office confirmation</span><span class="badge">Awaiting director</span>
-        <span class="badge">Returned</span><span class="badge">Published</span><span class="badge">Cancelled</span><span class="badge">Suspended</span>
+        <span class="badge">Draft</span><span class="badge">Publishing</span><span class="badge">Published</span>
+        <span class="badge">Partial delivery</span><span class="badge">Delivery failed</span>
       </div>
     </section>
 
     <section class="panel" aria-labelledby="dt">
       <div class="sec-head"><h2 id="dt">Delivery details</h2></div>
-      <div class="stats"><div><span>Emailed</span><b></b></div><div><span>Failed</span><b></b></div><div><span>Notified</span><b></b></div></div>
-      <div class="empty box"><b>No announcement selected</b>Select a row in the history to see its delivery log.</div>
+      <div class="empty box" id="deliveryDetails"><b>No announcement selected</b>Select a history row to see its delivery log.</div>
     </section>
   </div>
 
-  <!-- ============ OTHER VIEWS ============
-       Each list view builds its empty table from data-cols (columns split by "|")
-       and data-empty ("title|message"). Replace the generated <tbody> row with your data. -->
-  <section class="view panel" id="v-teacher" hidden data-title="Teacher requests" data-sub="Review requests sent by teachers. Check details, then approve, edit or reject."
-    data-cols="Title|Teacher|Audience|Requested|Status|Actions" data-empty="No teacher requests|New requests from teachers will appear here."></section>
+  <section class="view panel" id="v-drafts" hidden data-title="Drafts" data-sub="Saved announcements you can reopen, edit, publish, or delete.">
+    <div class="sec-head"><h2>Saved drafts</h2></div>
+    <div class="scroll"><table><thead><tr><th>Title</th><th>Audience</th><th>Last edited</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+  </section>
 
-  <section class="view panel" id="v-office" hidden data-title="Office requests" data-sub="Review requests submitted by offices."
-    data-cols="Title|Office|Audience|Submitted|Status|Actions" data-empty="No office requests|New requests from offices will appear here."></section>
-
-  <section class="view panel" id="v-drafts" hidden data-title="Drafts" data-sub="Announcements you are still working on."
-    data-cols="Title|Target|Audience|Last edited|Actions" data-empty="No drafts|Saved drafts will appear here."></section>
-
-  <section class="view panel" id="v-confirm" hidden data-title="Office confirmation" data-sub="Previews sent to the requesting office, waiting for their confirmation."
-    data-cols="Title|Office|Preview sent|Status|Actions" data-empty="Nothing awaiting confirmation|Previews sent to offices will appear here."></section>
-
-  <section class="view panel" id="v-director" hidden data-title="Director approval" data-sub="Announcements waiting for the director's decision."
-    data-cols="Title|Requested by|Sent to director|Status|Actions" data-empty="No pending approvals|Announcements sent to the director will appear here."></section>
-
-  <section class="view panel" id="v-returned" hidden data-title="Returned for corrections" data-sub="Announcements sent back. Revise them and submit again."
-    data-cols="Title|Returned by|Reason|Date|Actions" data-empty="Nothing returned|Announcements needing corrections will appear here."></section>
-
-  <section class="view panel" id="v-published" hidden data-title="Published" data-sub="Announcements that were published and sent to students."
-    data-cols="Title|Audience|Published|Emailed|Failed|Notified|Actions" data-empty="No published announcements|Published announcements will appear here."></section>
-
-  <section class="view panel" id="v-cancelled" hidden data-title="Cancelled / suspended" data-sub="Announcements that were cancelled or suspended."
-    data-cols="Title|Audience|Date|Status|Reason|Actions" data-empty="No cancelled announcements|Cancelled or suspended announcements will appear here."></section>
-
-  <section class="view panel" id="v-settings" hidden data-title="Settings" data-sub="Manage your account and notification preferences.">
-    <div class="sec-head"><h2>Account</h2></div>
-    <form action="#" method="post">
-      <div class="two">
-        <div class="fld"><label for="sn">Name</label><input type="text" id="sn" name="name"></div>
-        <div class="fld"><label for="se">Email</label><input type="email" id="se" name="email"></div>
-      </div>
-      <p class="lbl" style="margin-top:6px">Notify me when</p>
-      <label class="opt"><input type="checkbox" name="n1"><span><b>A new request arrives</b><small>From teachers or offices.</small></span></label>
-      <label class="opt"><input type="checkbox" name="n2"><span><b>An office confirms or the director decides</b><small>Approved, returned or rejected.</small></span></label>
-      <button class="btn green" type="submit">Save changes</button>
-    </form>
+  <section class="view panel" id="v-published" hidden data-title="Announcement history" data-sub="Publishing status and per-recipient delivery results.">
+    <div class="sec-head"><h2>Announcement history</h2></div>
+    <div class="scroll"><table><thead><tr><th>Title</th><th>Audience</th><th>Date</th><th>Status</th><th>Sent</th><th>Failed</th><th>Recipients</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
   </section>
 </main>
 
 <!-- ============ MODAL: CREATE ANNOUNCEMENT ============ -->
 <dialog id="create" aria-labelledby="ct">
-  <form method="dialog" id="announcementForm">
+  <form method="post" action="#" id="announcementForm">
     <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
+    <input type="hidden" name="announcement_id" id="announcementId">
+    <input type="hidden" name="publish_request_id" id="publishRequestId">
     <div class="dlg-h">
-      <div><h2 id="ct">Create announcement</h2><p>Enter the details, choose who it is for, then pick how it gets approved.</p></div>
-      <button class="x" type="submit" value="cancel" formnovalidate aria-label="Close">&times;</button>
+      <div><h2 id="ct">Create announcement</h2><p>Enter the announcement details and confirm the student recipients.</p></div>
+      <button class="x" type="button" data-close-modal aria-label="Close">&times;</button>
     </div>
 
     <div class="dlg-b">
@@ -168,7 +108,7 @@
         <div class="audience-intro">
           <div>
             <span class="lbl" id="audienceLabel">Target Audience</span>
-            <p class="hint">Choose all active students or select any student record, including demo records. Email addresses are checked when the announcement is published.</p>
+            <p class="hint">Choose active students or select a batch, course, year level, section, and students. Only active/enrolled non-sample records and the two designated test accounts can receive email.</p>
           </div>
           <button class="btn ghost sm" type="button" id="openAudience">Choose audience</button>
         </div>
@@ -199,22 +139,14 @@
           <label for="a-date">Publish date</label>
           <span class="date-label-actions"><span class="date-status" id="dateStatus" aria-live="polite"></span><button class="text-button" type="button" id="setTodayDate">Today</button></span>
         </div>
-        <input type="date" id="a-date" name="date">
+        <input type="date" id="a-date" name="date" required>
       </div>
-      <div class="fld">
-        <label for="a-src">Source</label>
-        <select id="a-src" name="source"><option>OSA (own announcement)</option><option>Teacher request</option><option>Office request</option></select>
-      </div>
-
-      <span class="lbl">Approval steps</span>
-      <label class="opt"><input type="checkbox" id="needOffice" name="office_confirmation"><span><b>Needs confirmation from the requesting office</b><small>A preview is sent to the office to confirm the details.</small></span></label>
-      <label class="opt"><input type="checkbox" id="needDir" name="director_approval"><span><b>Needs director approval</b><small>The announcement is sent to the director before publishing.</small></span></label>
-      <p class="hint" id="nextHint">With no approval steps, the announcement is published and students are notified right away.</p>
+      <p class="hint">Publishing sends email immediately. For this version, publish dates must be today.</p>
     </div>
 
     <div class="dlg-f">
-      <button class="btn ghost" type="submit" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn ghost" type="submit" value="draft" formnovalidate>Save draft</button>
+      <button class="btn ghost" type="button" data-close-modal>Cancel</button>
+      <button class="btn ghost" type="submit" value="draft" id="saveDraft">Save draft</button>
       <button class="btn green" type="submit" value="submit" id="go">Publish announcement</button>
     </div>
   </form>
@@ -225,16 +157,6 @@
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return [].slice.call((r || document).querySelectorAll(s)); };
   var views = $$('.view'), links = $$('[data-go]'), body = document.body, burger = $('.burger');
-
-  /* build empty tables for list views */
-  views.forEach(function (v) {
-    v.insertAdjacentHTML('afterbegin', v.id === 'v-dashboard' ? '' : '<div class="sec-head"><h2>' + v.dataset.title + '</h2></div>');
-    if (!v.dataset.cols) return;
-    var cols = v.dataset.cols.split('|'), e = (v.dataset.empty || '|').split('|');
-    v.insertAdjacentHTML('beforeend', '<div class="scroll"><table><thead><tr>' +
-      cols.map(function (c) { return '<th>' + c + '</th>'; }).join('') +
-      '</tr></thead><tbody><tr><td colspan="' + cols.length + '" class="empty"><b>' + e[0] + '</b>' + (e[1] || '') + '</td></tr></tbody></table></div>');
-  });
 
   /* hamburger drawer */
   function setNav(open) { body.classList.toggle('nav-open', open); burger.setAttribute('aria-expanded', open); }
@@ -255,6 +177,7 @@
     $('#pageSub').textContent = v.dataset.sub;
     setNav(false); window.scrollTo(0, 0);
   }
+
   var navigationTimer;
   $$('a[data-go], a[href^="#"]:not([href="#"])').forEach(function (link) {
     link.addEventListener('click', function () {
@@ -266,11 +189,12 @@
   window.addEventListener('hashchange', function () { show(false); });
   show(true);
 
-  /* create announcement modal */
-  var dlg = $('#create'), oc = $('#needOffice'), dc = $('#needDir'), go = $('#go'), hint = $('#nextHint');
+  /* announcement history and editor */
+  var dlg = $('#create'), announcementForm = $('#announcementForm');
   var publishDate = $('#a-date'), now = new Date();
   var today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   publishDate.min = today;
+  publishDate.max = today;
   if (!publishDate.value) publishDate.value = today;
   var dateStatus = $('#dateStatus');
   function updatePublishDateStatus() {
@@ -282,10 +206,7 @@
       dateStatus.textContent = 'Today';
       return;
     }
-    var selectedDate = new Date(publishDate.value + 'T00:00:00');
-    dateStatus.textContent = 'Scheduled for ' + selectedDate.toLocaleDateString(undefined, {
-      month:'short', day:'numeric', year:'numeric'
-    });
+    dateStatus.textContent = 'Today';
   }
   publishDate.addEventListener('input', updatePublishDateStatus);
   publishDate.addEventListener('change', updatePublishDateStatus);
@@ -294,16 +215,271 @@
     updatePublishDateStatus();
   });
   updatePublishDateStatus();
-  $$('[data-modal]').forEach(function (b) {
-    b.addEventListener('click', function (e) { e.preventDefault(); setNav(false); dlg.showModal(); });
-  });
-  dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close(); });
-  function step() {
-    if (oc.checked) { go.textContent = 'Send preview to office'; hint.textContent = 'The office confirms the details first' + (dc.checked ? ', then it goes to the director.' : ', then it is published.'); }
-    else if (dc.checked) { go.textContent = 'Send to director'; hint.textContent = 'The director approves or returns it. Once approved it is published.'; }
-    else { go.textContent = 'Publish announcement'; hint.textContent = 'With no approval steps, the announcement is published and students are notified right away.'; }
+  function newPublishRequestId() {
+    var bytes = new Uint8Array(16);
+    if (window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(bytes);
+    } else {
+      for (var index = 0; index < bytes.length; index++) bytes[index] = Math.floor(Math.random() * 256);
+    }
+    return Array.prototype.map.call(bytes, function (byte) { return byte.toString(16).padStart(2, '0'); }).join('');
   }
-  oc.addEventListener('change', step); dc.addEventListener('change', step);
+
+  async function requestJson(url, options) {
+    var response;
+    try {
+      response = await fetch(url, Object.assign({
+        credentials:'same-origin',
+        headers:{'Accept':'application/json'}
+      }, options || {}));
+    } catch (error) {
+      if (error instanceof TypeError) throw new Error('The request failed. Check your connection and try again.');
+      throw error;
+    }
+    var result;
+    try { result = await response.json(); }
+    catch (_) { throw new Error('The server returned an invalid response. Please try again.'); }
+    if (!response.ok || !result.ok) {
+      var requestError = new Error(result.message || 'The server could not complete the request.');
+      requestError.response = result;
+      throw requestError;
+    }
+    return result;
+  }
+
+  function getAudienceLabel(raw) {
+    if (!raw) return 'No recipients selected';
+    try {
+      var audience = JSON.parse(raw);
+      if (audience.mode === 'all_active') return 'All active students';
+      if (audience.mode === 'selective') {
+        return 'Batch ' + (audience.batch || '—') + ' · ' + (audience.course_code || 'Course') +
+          ' · ' + (audience.year_level || 'Year') + ' · ' + (audience.section_name || 'Section') +
+          ' · ' + ((audience.student_ids || []).length) + ' selected';
+      }
+    } catch (_) {}
+    return 'Recipient selection saved';
+  }
+
+  function emptyTableRow(tbody, columnCount, title, description) {
+    var row = document.createElement('tr');
+    var cell = document.createElement('td');
+    cell.colSpan = columnCount;
+    cell.className = 'empty';
+    var strong = document.createElement('b');
+    strong.textContent = title;
+    cell.appendChild(strong);
+    if (description) cell.appendChild(document.createTextNode(description));
+    row.appendChild(cell);
+    tbody.replaceChildren(row);
+  }
+
+  function addAction(cell, label, action, id) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn ghost sm';
+    button.textContent = label;
+    button.dataset.announcementAction = action;
+    button.dataset.announcementId = id;
+    cell.appendChild(button);
+  }
+
+  function addCell(row, value) {
+    var cell = document.createElement('td');
+    cell.textContent = value == null ? '' : String(value);
+    row.appendChild(cell);
+    return cell;
+  }
+
+  var announcements = [];
+  function renderAnnouncementLists() {
+    var drafts = announcements.filter(function (item) { return item.status === 'draft'; });
+    var history = announcements.filter(function (item) { return item.status !== 'draft'; });
+    $('#draftCount').textContent = String(drafts.length);
+    $('#announcementCount').textContent = String(history.length);
+
+    var dashboardBody = $('#v-dashboard table tbody');
+    var draftBody = $('#v-drafts table tbody');
+    var historyBody = $('#v-published table tbody');
+    [dashboardBody, draftBody, historyBody].forEach(function (tbody) { tbody.replaceChildren(); });
+    if (!announcements.length) {
+      emptyTableRow(dashboardBody, 8, 'No announcements yet', 'Create one to notify eligible students.');
+      emptyTableRow(historyBody, 8, 'No announcement history', 'Published announcements and delivery results will appear here.');
+    }
+    if (!drafts.length) emptyTableRow(draftBody, 4, 'No drafts', 'Saved drafts will appear here.');
+
+    announcements.forEach(function (item) {
+      var audience = getAudienceLabel(item.audience_json);
+      var recipientCount = Number(item.recipient_count || 0);
+      var date = item.published_at || item.publish_date || item.updated_at || item.created_at;
+      var dashboardRow = document.createElement('tr');
+      addCell(dashboardRow, item.title);
+      addCell(dashboardRow, audience);
+      addCell(dashboardRow, date);
+      addCell(dashboardRow, item.status.replaceAll('_', ' '));
+      addCell(dashboardRow, item.sent_count);
+      addCell(dashboardRow, item.failed_count);
+      addCell(dashboardRow, recipientCount);
+      var dashboardActions = addCell(dashboardRow, '');
+      if (item.status === 'draft') {
+        addAction(dashboardActions, 'Edit', 'edit', item.id);
+        addAction(dashboardActions, 'Delete', 'delete', item.id);
+      } else {
+        addAction(dashboardActions, 'Delivery details', 'details', item.id);
+      }
+      if (announcements.indexOf(item) < 10) dashboardBody.appendChild(dashboardRow);
+
+      if (item.status === 'draft') {
+        var draftRow = document.createElement('tr');
+        addCell(draftRow, item.title);
+        addCell(draftRow, audience);
+        addCell(draftRow, item.updated_at);
+        var draftActions = addCell(draftRow, '');
+        addAction(draftActions, 'Edit', 'edit', item.id);
+        addAction(draftActions, 'Delete', 'delete', item.id);
+        draftBody.appendChild(draftRow);
+      } else {
+        var historyRow = document.createElement('tr');
+        addCell(historyRow, item.title);
+        addCell(historyRow, audience);
+        addCell(historyRow, date);
+        addCell(historyRow, item.status.replaceAll('_', ' '));
+        addCell(historyRow, item.sent_count);
+        addCell(historyRow, item.failed_count);
+        addCell(historyRow, recipientCount);
+        var historyActions = addCell(historyRow, '');
+        addAction(historyActions, 'Delivery details', 'details', item.id);
+        historyBody.appendChild(historyRow);
+      }
+    });
+  }
+
+  async function refreshAnnouncements() {
+    var status = $('#dashboardStatus');
+    try {
+      var result = await requestJson('../php-connections/announcement-management.php?action=list');
+      announcements = result.announcements;
+      renderAnnouncementLists();
+      status.hidden = true;
+    } catch (error) {
+      status.textContent = error.message;
+      status.hidden = false;
+    }
+  }
+
+  async function showAnnouncementDetails(id) {
+    var panel = $('#deliveryDetails');
+    panel.textContent = 'Loading delivery details...';
+    try {
+      var result = await requestJson('../php-connections/announcement-management.php?action=details&id=' + encodeURIComponent(id));
+      var announcement = result.announcement;
+      panel.replaceChildren();
+      var title = document.createElement('b');
+      title.textContent = announcement.title + ' — ' + announcement.status.replaceAll('_', ' ');
+      panel.appendChild(title);
+      var summary = document.createElement('p');
+      summary.textContent = 'Emails sent: ' + announcement.sent_count + ' · Failed: ' + announcement.failed_count +
+        ' · Excluded: ' + announcement.excluded_count;
+      panel.appendChild(summary);
+      if (!result.recipients.length) {
+        panel.appendChild(document.createTextNode('No recipient delivery records are available.'));
+        return;
+      }
+      var list = document.createElement('ul');
+      result.recipients.forEach(function (recipient) {
+        var row = document.createElement('li');
+        row.textContent = recipient.student_name + ' — ' + recipient.delivery_status +
+          (recipient.delivered_at ? ' at ' + recipient.delivered_at : '');
+        list.appendChild(row);
+      });
+      panel.appendChild(list);
+    } catch (error) {
+      panel.textContent = error.message;
+    }
+  }
+
+  async function openDraft(id) {
+    var result = await requestJson('../php-connections/announcement-management.php?action=details&id=' + encodeURIComponent(id));
+    if (result.announcement.status !== 'draft') throw new Error('Only saved drafts can be edited.');
+    var announcement = result.announcement;
+    announcementForm.reset();
+    $('#announcementId').value = announcement.id;
+    $('#publishRequestId').value = newPublishRequestId();
+    $('#a-title').value = announcement.title;
+    $('#a-body').value = announcement.details;
+    publishDate.value = announcement.publish_date || today;
+    updatePublishDateStatus();
+    $('#ct').textContent = 'Edit draft';
+    $('#announcementStatus').hidden = true;
+    $('#announcementStatus').textContent = '';
+    await window.announcementAudience.restore(announcement.audience_json);
+    publishDate.required = false;
+    setNav(false);
+    dlg.showModal();
+  }
+
+  function openNewAnnouncement() {
+    announcementForm.reset();
+    $('#announcementId').value = '';
+    $('#publishRequestId').value = newPublishRequestId();
+    publishDate.value = today;
+    publishDate.required = false;
+    updatePublishDateStatus();
+    $('#ct').textContent = 'Create announcement';
+    $('#announcementStatus').hidden = true;
+    $('#announcementStatus').textContent = '';
+    window.announcementAudience.reset();
+    setNav(false);
+    dlg.showModal();
+  }
+
+  $$('[data-modal]').forEach(function (button) {
+    button.addEventListener('click', function (event) { event.preventDefault(); openNewAnnouncement(); });
+  });
+  $$('[data-close-modal]').forEach(function (button) {
+    button.addEventListener('click', function () { if (!announcementForm.dataset.busy) dlg.close(); });
+  });
+  dlg.addEventListener('click', function (event) {
+    if (event.target === dlg && !announcementForm.dataset.busy) dlg.close();
+  });
+  dlg.addEventListener('cancel', function (event) {
+    if (announcementForm.dataset.busy) event.preventDefault();
+  });
+
+  document.addEventListener('click', async function (event) {
+    var button = event.target.closest('[data-announcement-action]');
+    if (!button || button.disabled) return;
+    var id = button.dataset.announcementId;
+    if (button.dataset.announcementAction === 'details') {
+      showAnnouncementDetails(id);
+      if (location.hash !== '#dashboard') location.hash = '#dashboard';
+    } else if (button.dataset.announcementAction === 'edit') {
+      try { await openDraft(id); }
+      catch (error) {
+        var status = $('#dashboardStatus');
+        status.textContent = error.message;
+        status.hidden = false;
+      }
+    } else if (button.dataset.announcementAction === 'delete') {
+      if (!window.confirm('Delete this saved draft? This cannot be undone.')) return;
+      button.disabled = true;
+      var formData = new FormData();
+      formData.set('csrf_token', $('input[name="csrf_token"]', announcementForm).value);
+      formData.set('action', 'delete_draft');
+      formData.set('announcement_id', id);
+      try {
+        await requestJson('../php-connections/announcement-management.php', {method:'POST', body:formData});
+        await refreshAnnouncements();
+      } catch (error) {
+        var deleteStatus = $('#dashboardStatus');
+        deleteStatus.textContent = error.message;
+        deleteStatus.hidden = false;
+        button.disabled = false;
+      }
+    }
+  });
+
+  refreshAnnouncements();
 
   /* SQLite-backed Target Audience selection wizard. */
   (function () {
@@ -320,7 +496,8 @@
       yearLevelName: '',
       courseId: '', courseCode: '', courseName: '',
       sectionId: '', sectionName: '',
-      selectedStudentIds: []
+      selectedStudentIds: [],
+      activeSummary: null
     };
     var selectedStudents = [];
     var allStudents = [];
@@ -435,10 +612,10 @@
     }
 
     function renderModeStep() {
-      wizardInstruction.textContent = 'Choose the 2026 course shortcut or browse all student records.';
+      wizardInstruction.textContent = 'Choose the active student audience or browse eligible student records.';
       wizardScreen.innerHTML =
-        cardMarkup('all_active', 'All Active Batch as of 2026', 'Skip batch selection and choose from courses with students enrolled in 2026.', false, 'recipient-choice') +
-        cardMarkup('selective', 'Select Student Records', 'Choose records from any batch, course, year level, and section, including SAMPLE/demo records.', state.mode === 'selective', 'recipient-choice');
+        cardMarkup('all_active', 'All Active Students as of 2026', 'Select all active or enrolled, non-sample students with valid email addresses.', state.mode === 'all_active', 'recipient-choice') +
+        cardMarkup('selective', 'Select Student Records', 'Choose records from a batch, course, year level, and section, then review each selection.', state.mode === 'selective', 'recipient-choice');
       updateProgress();
       wizardBack.disabled = false;
       wizardContinue.disabled = true;
@@ -562,9 +739,11 @@
         var id = String(student.id);
         var selected = state.selectedStudentIds.indexOf(id) !== -1;
         var initials = String(student.student_name).split(/\s+/).map(function (part) { return part.charAt(0); }).slice(0,2).join('');
-        var emailStatus = student.has_valid_email ? 'Valid email available' : 'No valid email; excluded when publishing';
+        var eligible = student.eligible_for_announcement;
+        var emailStatus = !eligible ? 'Sample or inactive record; cannot receive announcements'
+          : (student.has_valid_email ? 'Valid email available' : 'No valid email; excluded when publishing');
         return '<label class="student-row' + (selected ? ' is-selected' : '') + '">' +
-          '<input type="checkbox" class="student-checkbox" value="' + escapeHtml(id) + '"' + (selected ? ' checked' : '') + '>' +
+          '<input type="checkbox" class="student-checkbox" value="' + escapeHtml(id) + '"' + (selected ? ' checked' : '') + (!eligible && !selected ? ' disabled' : '') + '>' +
           '<span class="student-avatar" aria-hidden="true">' + escapeHtml(initials) + '</span>' +
           '<span class="student-info"><strong>' + escapeHtml(student.student_name) + '</strong><small>' + escapeHtml(student.course_code) + ' · ' + escapeHtml(student.section_name) + '</small>' +
           '<span class="recipient-email-status' + (student.has_valid_email ? '' : ' none') + '">' + escapeHtml(emailStatus) + '</span></span>' +
@@ -578,14 +757,28 @@
     }
 
     function renderReview() {
+      if (state.mode === 'all_active') {
+        var summary = state.activeSummary || {eligible_count:0, active_student_count:0, excluded_count:0};
+        wizardInstruction.textContent = 'Review the active student audience before confirming.';
+        wizardScreen.innerHTML = '<div class="review-count-grid">' +
+          '<div class="review-count"><strong>' + summary.eligible_count + '</strong><span>Eligible recipients</span></div>' +
+          '<div class="review-count"><strong>' + summary.active_student_count + '</strong><span>Active student records</span></div>' +
+          '<div class="review-count"><strong>' + summary.excluded_count + '</strong><span>Invalid or duplicate email records</span></div></div>' +
+          '<p class="demo-warning">This selection is resolved from current SQLite student records. No email is sent until you publish.</p>';
+        updateProgress();
+        wizardContinue.disabled = Number(summary.eligible_count) === 0;
+        return;
+      }
       var chosen = selectedStudents;
-      var withEmail = chosen.filter(function (student) { return student.has_valid_email; }).length;
-      var withoutEmail = chosen.length - withEmail;
+      var eligible = chosen.filter(function (student) {
+        return student.eligible_for_announcement && student.has_valid_email;
+      }).length;
+      var withoutEmail = chosen.length - eligible;
       wizardInstruction.textContent = 'Review the selected recipient records.';
       wizardScreen.innerHTML = '<div class="review-count-grid">' +
         '<div class="review-count"><strong>' + chosen.length + '</strong><span>Selected student records</span></div>' +
-        '<div class="review-count"><strong>' + withEmail + '</strong><span>Records with valid email</span></div>' +
-        '<div class="review-count"><strong>' + withoutEmail + '</strong><span>Excluded without valid email</span></div></div>' +
+        '<div class="review-count"><strong>' + eligible + '</strong><span>Eligible recipients</span></div>' +
+        '<div class="review-count"><strong>' + withoutEmail + '</strong><span>Excluded or ineligible records</span></div></div>' +
         '<div class="audience-summary">' +
         '<div class="summary-row"><b>Batch</b><span>' + escapeHtml(state.batch) + '</span></div>' +
         '<div class="summary-row"><b>Year Level</b><span>' + escapeHtml(state.yearLevelName) + '</span></div>' +
@@ -630,8 +823,12 @@
       openAudience.hidden = false;
       openAudience.textContent = audienceConfirmed ? 'Change audience' : 'Choose audience';
       if (audienceConfirmed) {
-        var audienceTitle = escapeHtml(state.batch) + ' · ' + escapeHtml(state.courseCode) + ' · ' + escapeHtml(state.yearLevelName);
-        var audienceDetail = escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected students';
+        var audienceTitle = state.mode === 'all_active'
+          ? 'All active students'
+          : escapeHtml(state.batch) + ' · ' + escapeHtml(state.courseCode) + ' · ' + escapeHtml(state.yearLevelName);
+        var audienceDetail = state.mode === 'all_active'
+          ? (state.activeSummary ? state.activeSummary.eligible_count : 0) + ' eligible recipients'
+          : escapeHtml(state.sectionName) + ' · ' + state.selectedStudentIds.length + ' selected students';
         audienceCompact.innerHTML = '<span><strong>' + audienceTitle + '</strong><small>' + audienceDetail + '</small></span><button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
         audienceCompact.hidden = false;
         $('#editAudience', audienceCompact).addEventListener('click', function () {
@@ -645,6 +842,58 @@
         audienceCompact.hidden = true;
       }
     }
+
+    window.announcementAudience = {
+      reset: function () {
+        clearAfter(1);
+        state.mode = '';
+        state.activeSummary = null;
+        currentStep = 0;
+        batchSearchQuery = '';
+        studentSearchQuery = '';
+        audienceConfirmed = false;
+        audienceValue.value = '';
+        wizard.hidden = true;
+        openAudience.hidden = false;
+        openAudience.textContent = 'Choose audience';
+        audienceCompact.hidden = true;
+      },
+      restore: async function (raw) {
+        this.reset();
+        if (!raw) return;
+        var audience = JSON.parse(raw);
+        state.mode = audience.mode;
+        state.batch = audience.batch == null ? '' : String(audience.batch);
+        state.yearLevelName = audience.year_level || '';
+        state.courseId = audience.course_id == null ? '' : String(audience.course_id);
+        state.courseCode = audience.course_code || '';
+        state.courseName = audience.course_name || '';
+        state.sectionId = audience.section_id == null ? '' : String(audience.section_id);
+        state.sectionName = audience.section_name || '';
+        state.selectedStudentIds = Array.isArray(audience.student_ids) ? audience.student_ids.map(String) : [];
+        if (state.mode === 'selective' && state.batch && state.courseId && state.yearLevelName && state.sectionId) {
+          var params = new URLSearchParams({
+            batch: state.batch,
+            course_id: state.courseId,
+            year_level: state.yearLevelName,
+            section_id: state.sectionId
+          });
+          var result = await fetchJson('../php-connections/get-students.php?' + params.toString());
+          allStudents = result.students;
+          selectedStudents = allStudents.filter(function (student) {
+            return state.selectedStudentIds.indexOf(String(student.id)) !== -1;
+          });
+        } else if (state.mode === 'all_active') {
+          var active = await fetchJson('../php-connections/get-audience-options.php?kind=active_summary');
+          state.activeSummary = active.summary;
+        }
+        audienceValue.value = JSON.stringify(audience);
+        audienceConfirmed = true;
+        currentStep = 6;
+        wizard.hidden = true;
+        closeWizard();
+      }
+    };
 
     openAudience.addEventListener('click', function () {
       wizard.hidden = false;
@@ -675,7 +924,7 @@
           return;
         }
         if (event.target.closest('.select-all-visible')) {
-          allStudents.forEach(function (student) { var id = String(student.id); if (state.selectedStudentIds.indexOf(id) === -1) state.selectedStudentIds.push(id); });
+          allStudents.filter(function (student) { return student.eligible_for_announcement; }).forEach(function (student) { var id = String(student.id); if (state.selectedStudentIds.indexOf(id) === -1) state.selectedStudentIds.push(id); });
           selectedStudents = allStudents.filter(function (student) { return state.selectedStudentIds.indexOf(String(student.id)) !== -1; });
           renderStudentRows(); return;
         }
@@ -690,20 +939,28 @@
 
       var value = choice.dataset.choice;
       if (currentStep === 0) {
-        var selectedMode = 'selective';
-        if (state.mode !== selectedMode) clearAfter(1);
-        state.mode = selectedMode;
+        if (value === 'all_active') {
+          clearAfter(1);
+          state.mode = 'all_active';
+          state.activeSummary = null;
+          audienceConfirmed = false;
+          audienceValue.value = '';
+          audienceCompact.hidden = true;
+          wizardContinue.disabled = true;
+          fetchJson('../php-connections/get-audience-options.php?kind=active_summary').then(function (result) {
+            state.activeSummary = result.summary;
+            currentStep = 6;
+            renderWizard(true);
+          }).catch(function (error) {
+            wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+          });
+          return;
+        }
+        if (state.mode !== 'selective') clearAfter(1);
+        state.mode = 'selective';
         audienceConfirmed = false;
         audienceValue.value = '';
         audienceCompact.hidden = true;
-        if (value === 'all_active') {
-          clearAfter(1);
-          state.mode = 'selective';
-          state.batch = '2026';
-          currentStep = 2;
-          renderWizard(true);
-          return;
-        }
         wizardContinue.disabled = true;
         if (!allBatches.length) {
           loadBatches().then(function (loaded) {
@@ -738,49 +995,62 @@
 
     $('#announcementForm').addEventListener('submit', async function (event) {
       var submitter = event.submitter || document.activeElement;
-      if (!submitter || submitter.id !== 'go') return;
+      if (!submitter || (submitter.id !== 'go' && submitter.id !== 'saveDraft')) return;
       event.preventDefault();
+      if (this.dataset.busy) return;
       var announcementStatus = $('#announcementStatus');
-      if (!audienceConfirmed || !audienceValue.value) {
+      var isPublish = submitter.id === 'go';
+      publishDate.required = isPublish;
+      if (!this.reportValidity()) return;
+      if (isPublish && (!audienceConfirmed || !audienceValue.value)) {
         announcementStatus.textContent = 'Choose and confirm recipients before publishing.';
         announcementStatus.hidden = false;
         return;
       }
-      if (oc.checked || dc.checked) {
-        announcementStatus.textContent = 'Student emails are not sent while approval steps are pending. Publish the announcement after approval.';
-        announcementStatus.hidden = false;
-        return;
-      }
-      if (!this.reportValidity()) return;
 
-      var publishButton = submitter;
-      publishButton.disabled = true;
-      announcementStatus.textContent = 'Publishing announcement and sending email...';
+      var buttons = $$('button', this);
+      this.dataset.busy = '1';
+      buttons.forEach(function (button) { button.disabled = true; });
+      announcementStatus.textContent = isPublish ? 'Publishing announcement and sending email...' : 'Saving draft...';
       announcementStatus.hidden = false;
       try {
-        var publishData = new FormData(this);
-        publishData.set('action', 'publish');
-        var response = await fetch('../php-connections/publish-announcement.php', {
-          method:'POST',
-          credentials:'same-origin',
-          headers:{'Accept':'application/json'},
-          body:publishData
-        });
+        var data = new FormData(this);
+        data.set('action', isPublish ? 'publish' : 'save_draft');
         var result;
-        try { result = await response.json(); }
-        catch (_) { throw new Error('The server returned an invalid response. Please try again.'); }
-        if (!response.ok || !result.ok) {
-          var message = result.message || 'The announcement could not be published.';
-          if (typeof result.excluded_count === 'number') message += ' Excluded recipients: ' + result.excluded_count + '.';
-          if (typeof result.sent_count === 'number') message += ' Emails sent before the failure: ' + result.sent_count + '.';
-          throw new Error(message);
+        try {
+          result = await requestJson(isPublish
+            ? '../php-connections/publish-announcement.php'
+            : '../php-connections/announcement-management.php', {method:'POST', body:data});
+        } catch (error) {
+          var delivery = error.response || {};
+          if (isPublish && (typeof delivery.sent_count === 'number' || typeof delivery.failed_count === 'number')) {
+            error.message += ' Sent: ' + (delivery.sent_count || 0) + '; failed: ' + (delivery.failed_count || 0) + '.';
+          }
+          throw error;
         }
-        announcementStatus.textContent = 'Announcement published. Emails sent: ' + result.sent_count + '. Recipients excluded for invalid or duplicate email: ' + result.excluded_count + '.';
+        if (result.announcement_id) $('#announcementId').value = result.announcement_id;
+        await refreshAnnouncements();
+        if (isPublish) {
+          announcementStatus.textContent = 'Announcement published. Emails sent: ' + result.sent_count +
+            '; failed: ' + result.failed_count + '; excluded: ' + result.excluded_count + '.';
+          var dashboardStatus = $('#dashboardStatus');
+          dashboardStatus.textContent = announcementStatus.textContent;
+          dashboardStatus.hidden = false;
+          dlg.close();
+        } else {
+          announcementStatus.textContent = 'Draft saved. It will remain available in Drafts until you delete or publish it.';
+        }
       } catch (error) {
+        if (isPublish && error.response && error.response.announcement_id) {
+          await refreshAnnouncements();
+          await showAnnouncementDetails(error.response.announcement_id);
+        }
         announcementStatus.textContent = error instanceof TypeError
           ? 'The request failed. Check your connection and try again.'
           : error.message;
-        publishButton.disabled = false;
+      } finally {
+        delete this.dataset.busy;
+        buttons.forEach(function (button) { button.disabled = false; });
       }
     });
 
@@ -815,7 +1085,10 @@
           year_level: state.mode === 'selective' ? state.yearLevelName : null,
           course_id: state.mode === 'selective' ? Number(state.courseId) : null,
           section_id: state.mode === 'selective' ? Number(state.sectionId) : null,
-          student_ids: state.mode === 'selective' ? state.selectedStudentIds.map(function (id) { return Number(id); }) : []
+          student_ids: state.mode === 'selective' ? state.selectedStudentIds.map(function (id) { return Number(id); }) : [],
+          course_code: state.mode === 'selective' ? state.courseCode : null,
+          course_name: state.mode === 'selective' ? state.courseName : null,
+          section_name: state.mode === 'selective' ? state.sectionName : null
         });
         audienceConfirmed = true;
         closeWizard();

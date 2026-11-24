@@ -42,3 +42,26 @@ function csrf_token_is_valid(): bool
         && isset($_SESSION['csrf_token'])
         && hash_equals($_SESSION['csrf_token'], $submittedToken);
 }
+
+function is_osa_admin(PDO $db): bool
+{
+    $userId = filter_var($_SESSION['user_id'] ?? null, FILTER_VALIDATE_INT);
+    if ($userId === false || $userId < 1) {
+        return false;
+    }
+
+    $stmt = $db->prepare('
+        SELECT 1
+        FROM users
+        WHERE id = :id
+          AND id = (SELECT MIN(id) FROM users)
+          AND session_version = :session_version
+        LIMIT 1
+    ');
+    $stmt->execute([
+        ':id' => $userId,
+        ':session_version' => (int) ($_SESSION['session_version'] ?? 0),
+    ]);
+
+    return $stmt->fetchColumn() !== false;
+}

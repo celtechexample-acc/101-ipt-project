@@ -1,11 +1,27 @@
 <?php
 declare(strict_types=1);
 
+const ANNOUNCEMENT_TEST_STUDENT_IDS = [48961, 86363];
+
+function announcement_student_is_eligible(array $student): bool
+{
+    $studentId = filter_var($student['id'] ?? null, FILTER_VALIDATE_INT);
+    $isSample = (int) ($student['is_sample'] ?? 1) === 1;
+    $status = strtoupper(trim((string) ($student['student_status'] ?? '')));
+
+    if ($isSample) {
+        return $studentId !== false && in_array($studentId, ANNOUNCEMENT_TEST_STUDENT_IDS, true);
+    }
+
+    return in_array($status, ['ACTIVE', 'ENROLLED'], true);
+}
+
 function announcement_fetch_active_students(PDO $db, ?array $studentIds = null): array
 {
     $sql = '
         SELECT s.id, s.student_name, s.enrollment_year, s.course_id, s.year_level,
-               s.section_id, s.email, c.code AS course_code, c.name AS course_name,
+               s.section_id, s.email, s.student_status, s.is_sample,
+               c.code AS course_code, c.name AS course_name,
                sec.name AS section_name
         FROM students s
         LEFT JOIN courses c ON c.id = s.course_id
@@ -52,7 +68,8 @@ function announcement_fetch_students(PDO $db, array $studentIds): array
 
     $stmt = $db->prepare('
         SELECT s.id, s.student_name, s.enrollment_year, s.course_id, s.year_level,
-               s.section_id, s.email, c.code AS course_code, c.name AS course_name,
+               s.section_id, s.email, s.student_status, s.is_sample,
+               c.code AS course_code, c.name AS course_name,
                sec.name AS section_name
         FROM students s
         LEFT JOIN courses c ON c.id = s.course_id

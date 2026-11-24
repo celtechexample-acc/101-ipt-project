@@ -79,4 +79,7 @@ if (is_file($studentSqlPath)) {
     }
     $db->exec($studentSql);
 }
+
+require_once __DIR__ . '/announcement-schema.php';
+ensure_announcement_schema($db);
 ?>

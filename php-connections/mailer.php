@@ -83,21 +83,22 @@ function send_password_reset_email(string $recipient, string $otp): void
     $mail->send();
 }
 
-function send_announcement_email(string $recipient, string $title, string $details): void
+function osa_create_announcement_message(string $recipient, string $title, string $details): PHPMailer
 {
     $mail = osa_create_mailer();
     $mail->addAddress($recipient);
     $mail->isHTML(true);
-    $mail->Subject = 'CELTECH OSA - ' . str_replace(["\r", "\n"], ' ', $title);
-    $escapedTitle = htmlspecialchars($title, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    $mail->Subject = $title;
     $escapedDetails = nl2br(htmlspecialchars($details, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
-    $mail->Body = '<!doctype html><html lang="en"><body style="margin:0;padding:24px;background:#f2faf5;font-family:Arial,sans-serif;color:#0d1f17">'
-        . '<table role="presentation" style="max-width:640px;margin:0 auto;background:#fff;border-radius:16px;padding:32px">'
-        . '<tr><td><p style="margin:0 0 8px;color:#166a42;font-weight:bold">CELTECH COLLEGE OLONGAPO</p>'
-        . '<h1 style="font-size:22px;margin:0 0 20px">Office of Student Affairs</h1>'
-        . '<h2 style="font-size:18px">' . $escapedTitle . '</h2><p>' . $escapedDetails . '</p>'
-        . '<p style="margin-top:28px;color:#5b6e64">CELTECH Office of Student Affairs</p></td></tr></table></body></html>';
-    $mail->AltBody = "CELTECH COLLEGE OLONGAPO - Office of Student Affairs\n\n"
-        . $title . "\n\n" . $details . "\n";
+    $mail->Body = '<!doctype html><html lang="en"><body style="font-family:Arial,sans-serif;color:#0d1f17">'
+        . '<p>' . $escapedDetails . '</p></body></html>';
+    $mail->AltBody = $details;
+
+    return $mail;
+}
+
+function send_announcement_email(string $recipient, string $title, string $details): void
+{
+    $mail = osa_create_announcement_message($recipient, $title, $details);
     $mail->send();
 }

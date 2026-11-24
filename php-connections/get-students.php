@@ -8,10 +8,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
     exit('Method not allowed.');
 }
-if (!isset($_SESSION['user_id'])) {
+if (!isset($_SESSION['user_id']) || !is_osa_admin($db)) {
     http_response_code(401);
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(['ok' => false, 'message' => 'Please log in.'], JSON_THROW_ON_ERROR);
+    echo json_encode(['ok' => false, 'message' => 'Please log in to the OSA Admin account.'], JSON_THROW_ON_ERROR);
     exit;
 }
 
@@ -36,7 +36,8 @@ if ($batch === false || $batch < 1
 
 $stmt = $db->prepare('
     SELECT s.id, s.student_name, s.enrollment_year, s.year_level,
-           s.email, c.code AS course_code, sec.name AS section_name
+           s.email, s.student_status, s.is_sample,
+           c.code AS course_code, sec.name AS section_name
     FROM students s
     JOIN courses c ON c.id = s.course_id
     JOIN sections sec ON sec.id = s.section_id
@@ -63,6 +64,7 @@ $students = array_map(static function (array $student): array {
         'course_code' => $student['course_code'],
         'section_name' => $student['section_name'],
         'has_valid_email' => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
+        'eligible_for_announcement' => announcement_student_is_eligible($student),
     ];
 }, $stmt->fetchAll());
 

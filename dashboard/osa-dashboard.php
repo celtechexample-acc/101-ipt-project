@@ -3,15 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../php-connections/auth.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../portals/Ossa-login.php');
-    exit;
-}
-
-$stmt = $db->prepare('SELECT session_version FROM users WHERE id = :id');
-$stmt->execute([':id' => (int) $_SESSION['user_id']]);
-$sessionVersion = $stmt->fetchColumn();
-if ($sessionVersion === false || (int) $sessionVersion !== (int) ($_SESSION['session_version'] ?? 0)) {
+if (!is_osa_admin($db)) {
     $_SESSION = [];
     session_destroy();
     header('Location: ../portals/Ossa-login.php');

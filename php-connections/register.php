@@ -14,6 +14,11 @@ if (!csrf_token_is_valid()) {
     exit;
 }
 
+if ((int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0) {
+    header('Location: ../portals/Ossa-login.php?error=setup_completed');
+    exit;
+}
+
 $name = trim(is_string($_POST['name'] ?? null) ? $_POST['name'] : '');
 $email = trim(is_string($_POST['email'] ?? null) ? $_POST['email'] : '');
 $password = is_string($_POST['password'] ?? null) ? $_POST['password'] : '';
@@ -49,6 +54,11 @@ if (!hash_equals($password, $confirmation)) {
 
 try {
     begin_sqlite_immediate($db);
+    if ((int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn() > 0) {
+        $db->rollBack();
+        header('Location: ../portals/Ossa-login.php?error=setup_completed');
+        exit;
+    }
     $existingAccount = $db->prepare('SELECT 1 FROM users WHERE email = :email COLLATE NOCASE LIMIT 1');
     $existingAccount->execute([':email' => $email]);
     if ($existingAccount->fetchColumn() !== false) {

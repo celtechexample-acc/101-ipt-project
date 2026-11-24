@@ -30,7 +30,8 @@ $registrationEmail = htmlspecialchars(
     ENT_QUOTES,
     'UTF-8'
 );
-$registrationOpen = $registrationError !== '';
+$registrationAvailable = (int) $db->query('SELECT COUNT(*) FROM users')->fetchColumn() === 0;
+$registrationOpen = $registrationAvailable && $registrationError !== '';
 
 $err   = $_GET['error'] ?? '';
 $lockUntil = filter_var($_GET['until'] ?? null, FILTER_VALIDATE_INT);
@@ -110,11 +111,14 @@ $success = $registered || $loggedOut;
 
     <button class="btn" type="submit" id="loginBtn" data-loading-label="Logging in..." <?= $err === 'locked' ? 'disabled' : '' ?>><span class="spin"></span><span data-button-label>Log in</span></button>
    
-    <p class="register-prompt">New to the OSSA Portal? <button type="button" class="linkbtn" id="openRegister">Register</button></p>
+    <?php if ($registrationAvailable): ?>
+      <p class="register-prompt">New to the OSSA Portal? <button type="button" class="linkbtn" id="openRegister">Register</button></p>
+    <?php endif; ?>
     <p class="note">Need help signing in? call the devloper for debugs.</p>
   </form>
 </main>
 
+<?php if ($registrationAvailable): ?>
 <!-- REGISTRATION MODAL -->
 <div class="modal <?= $registrationOpen ? 'open' : '' ?>" id="register" aria-hidden="<?= $registrationOpen ? 'false' : 'true' ?>">
   <div class="sheet register-sheet" role="dialog" aria-modal="true" aria-labelledby="register-title">
@@ -146,6 +150,7 @@ $success = $registered || $loggedOut;
     </form>
   </div>
 </div>
+<?php endif; ?>
 
 <!-- FORGOT PASSWORD WIZARD -->
 <div class="modal" id="forgot" aria-hidden="true">
@@ -217,6 +222,8 @@ $success = $registered || $loggedOut;
   var form = document.getElementById("registerForm");
   var name = document.getElementById("register-name");
   var button = document.getElementById("registerBtn");
+
+  if (!modal) return;
 
   function open(){
     modal.classList.add("open");
