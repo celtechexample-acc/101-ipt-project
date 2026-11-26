@@ -92,6 +92,14 @@
 
   <section class="view panel" id="v-published" hidden data-title="Announcement history" data-sub="Publishing status and per-recipient delivery results.">
     <div class="sec-head"><h2>Announcement history</h2></div>
+    <div class="announcement-status-filters" role="group" aria-label="Filter announcement history by status">
+      <button type="button" data-announcement-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-announcement-filter="draft" aria-pressed="false">Draft</button>
+      <button type="button" data-announcement-filter="publishing" aria-pressed="false">Publishing</button>
+      <button type="button" data-announcement-filter="published" aria-pressed="false">Published</button>
+      <button type="button" data-announcement-filter="partial_delivery" aria-pressed="false">Partial delivery</button>
+      <button type="button" data-announcement-filter="delivery_failed" aria-pressed="false">Delivery failed</button>
+    </div>
     <div class="scroll"><table><thead><tr><th>Title</th><th>Audience</th><th>Date</th><th>Status</th><th>Sent</th><th>Failed</th><th>Recipients</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
   </section>
 
@@ -196,10 +204,18 @@
     <div class="dlg-f">
       <button class="btn ghost" type="button" data-close-modal>Cancel</button>
       <button class="btn ghost" type="submit" value="draft" id="saveDraft">Save draft</button>
-      <button class="btn green" type="submit" value="submit" id="go">Publish announcement</button>
+      <button class="btn green" type="submit" value="submit" id="go" aria-disabled="true">Publish announcement</button>
     </div>
   </form>
 </dialog>
+<div class="sending-overlay" id="sendingOverlay" role="dialog" aria-modal="true" aria-labelledby="sendingTitle" aria-describedby="sendingMessage" hidden>
+  <div class="sending-modal">
+    <div class="sending-spinner" aria-hidden="true"></div>
+    <h2 id="sendingTitle">Sending Announcement...</h2>
+    <p id="sendingMessage">Your announcement is currently being processed and emails are being delivered to the selected recipients.</p>
+  </div>
+</div>
+<div class="toast" id="dashboardToast" role="status" aria-live="polite" hidden></div>
 
 <script>
 (function () {
@@ -326,14 +342,79 @@
     tbody.replaceChildren(row);
   }
 
-  function addAction(cell, label, action, id) {
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn ghost sm';
-    button.textContent = label;
-    button.dataset.announcementAction = action;
-    button.dataset.announcementId = id;
-    cell.appendChild(button);
+  var openAnnouncementMenu = null;
+
+  function closeAnnouncementMenu(restoreFocus) {
+    if (!openAnnouncementMenu) return;
+    var menu = openAnnouncementMenu;
+    openAnnouncementMenu = null;
+    menu.remove();
+    if (restoreFocus && menu.trigger) menu.trigger.focus();
+  }
+
+  function addActionMenu(cell, actions, id) {
+    var wrapper = document.createElement('div');
+    wrapper.className = 'announcement-actions';
+    var trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'btn ghost sm manage-announcement';
+    trigger.textContent = 'Manage';
+    trigger.setAttribute('aria-haspopup', 'menu');
+    trigger.setAttribute('aria-expanded', 'false');
+    wrapper.appendChild(trigger);
+
+    trigger.addEventListener('click', function (event) {
+      event.stopPropagation();
+      if (openAnnouncementMenu && openAnnouncementMenu.trigger === trigger) {
+        closeAnnouncementMenu(false);
+        trigger.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      closeAnnouncementMenu(false);
+      var rect = trigger.getBoundingClientRect();
+      var menu = document.createElement('div');
+      menu.className = 'announcement-action-menu';
+      menu.setAttribute('role', 'menu');
+      menu.trigger = trigger;
+      actions.forEach(function (action) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'announcement-action-item';
+        item.setAttribute('role', 'menuitem');
+        item.dataset.announcementAction = action.action;
+        item.dataset.announcementId = id;
+        item.innerHTML = '<span class="announcement-action-icon" aria-hidden="true">' +
+          (action.action === 'edit' ? '✎' : action.action === 'delete' ? '🗑' : '⊙') +
+          '</span><span>' + action.label + '</span>';
+        menu.appendChild(item);
+      });
+      document.body.appendChild(menu);
+      var menuWidth = menu.offsetWidth;
+      var menuHeight = menu.offsetHeight;
+      var left = Math.max(8, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 8));
+      var top = rect.bottom + 6;
+      if (top + menuHeight > window.innerHeight - 8) top = Math.max(8, rect.top - menuHeight - 6);
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+      openAnnouncementMenu = menu;
+      trigger.setAttribute('aria-expanded', 'true');
+      var firstItem = menu.querySelector('[role="menuitem"]');
+      if (firstItem) firstItem.focus();
+    });
+
+    trigger.addEventListener('keydown', function (event) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        trigger.click();
+        var menu = openAnnouncementMenu;
+        if (menu) {
+          var items = Array.prototype.slice.call(menu.querySelectorAll('[role="menuitem"]'));
+          var index = event.key === 'ArrowUp' ? items.length - 1 : 0;
+          if (items[index]) items[index].focus();
+        }
+      }
+    });
+    cell.appendChild(wrapper);
   }
 
   function addCell(row, value) {
@@ -344,9 +425,13 @@
   }
 
   var announcements = [];
+  var announcementStatusFilter = 'all';
   function renderAnnouncementLists() {
     var drafts = announcements.filter(function (item) { return item.status === 'draft'; });
     var history = announcements.filter(function (item) { return item.status !== 'draft'; });
+    var filteredHistory = announcements.filter(function (item) {
+      return announcementStatusFilter === 'all' || item.status === announcementStatusFilter;
+    });
     $('#draftCount').textContent = String(drafts.length);
     $('#announcementCount').textContent = String(history.length);
 
@@ -374,10 +459,14 @@
       addCell(dashboardRow, recipientCount);
       var dashboardActions = addCell(dashboardRow, '');
       if (item.status === 'draft') {
-        addAction(dashboardActions, 'Edit', 'edit', item.id);
-        addAction(dashboardActions, 'Delete', 'delete', item.id);
+        addActionMenu(dashboardActions, [
+          {label:'Edit draft', action:'edit'},
+          {label:'Delete draft', action:'delete'}
+        ], item.id);
       } else {
-        addAction(dashboardActions, 'Delivery details', 'details', item.id);
+        addActionMenu(dashboardActions, [
+          {label:'Delivery details', action:'details'}
+        ], item.id);
       }
       if (announcements.indexOf(item) < 10) dashboardBody.appendChild(dashboardRow);
 
@@ -387,10 +476,29 @@
         addCell(draftRow, audience);
         addCell(draftRow, item.updated_at);
         var draftActions = addCell(draftRow, '');
-        addAction(draftActions, 'Edit', 'edit', item.id);
-        addAction(draftActions, 'Delete', 'delete', item.id);
+        addActionMenu(draftActions, [
+          {label:'Edit draft', action:'edit'},
+          {label:'Delete draft', action:'delete'}
+        ], item.id);
         draftBody.appendChild(draftRow);
+        if (announcementStatusFilter === 'all' || announcementStatusFilter === 'draft') {
+          var draftHistoryRow = document.createElement('tr');
+          addCell(draftHistoryRow, item.title);
+          addCell(draftHistoryRow, audience);
+          addCell(draftHistoryRow, item.publish_date || item.updated_at || item.created_at);
+          addCell(draftHistoryRow, 'draft');
+          addCell(draftHistoryRow, item.sent_count || 0);
+          addCell(draftHistoryRow, item.failed_count || 0);
+          addCell(draftHistoryRow, recipientCount);
+          var draftHistoryActions = addCell(draftHistoryRow, '');
+          addActionMenu(draftHistoryActions, [
+            {label:'Edit draft', action:'edit'},
+            {label:'Delete draft', action:'delete'}
+          ], item.id);
+          historyBody.appendChild(draftHistoryRow);
+        }
       } else {
+        if (announcementStatusFilter !== 'all' && item.status !== announcementStatusFilter) return;
         var historyRow = document.createElement('tr');
         addCell(historyRow, item.title);
         addCell(historyRow, audience);
@@ -400,10 +508,16 @@
         addCell(historyRow, item.failed_count);
         addCell(historyRow, recipientCount);
         var historyActions = addCell(historyRow, '');
-        addAction(historyActions, 'Delivery details', 'details', item.id);
+        addActionMenu(historyActions, [
+          {label:'Delivery details', action:'details'}
+        ], item.id);
         historyBody.appendChild(historyRow);
       }
     });
+    if (!filteredHistory.length) {
+      emptyTableRow(historyBody, 8, 'No matching announcements',
+        announcementStatusFilter === 'all' ? 'No announcement history yet.' : 'No announcements match this status.');
+    }
   }
 
   async function refreshAnnouncements() {
@@ -500,7 +614,17 @@
 
   document.addEventListener('click', async function (event) {
     var button = event.target.closest('[data-announcement-action]');
-    if (!button || button.disabled) return;
+    if (!button || button.disabled) {
+      if (openAnnouncementMenu && !event.target.closest('.announcement-action-menu')) {
+        var outsideTrigger = openAnnouncementMenu.trigger;
+        closeAnnouncementMenu(false);
+        outsideTrigger.setAttribute('aria-expanded', 'false');
+      }
+      return;
+    }
+    var previousTrigger = openAnnouncementMenu && openAnnouncementMenu.trigger;
+    closeAnnouncementMenu(false);
+    if (previousTrigger) previousTrigger.setAttribute('aria-expanded', 'false');
     var id = button.dataset.announcementId;
     if (button.dataset.announcementAction === 'details') {
       showAnnouncementDetails(id);
@@ -529,6 +653,34 @@
         button.disabled = false;
       }
     }
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (!openAnnouncementMenu) return;
+    var items = Array.prototype.slice.call(openAnnouncementMenu.querySelectorAll('[role="menuitem"]'));
+    var currentIndex = items.indexOf(document.activeElement);
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      var trigger = openAnnouncementMenu.trigger;
+      closeAnnouncementMenu(true);
+      trigger.setAttribute('aria-expanded', 'false');
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      var nextIndex = event.key === 'Home' ? 0
+        : event.key === 'End' ? items.length - 1
+        : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      if (items[nextIndex]) items[nextIndex].focus();
+    }
+  });
+
+  $$('[data-announcement-filter]').forEach(function (button) {
+    button.addEventListener('click', function () {
+      announcementStatusFilter = button.dataset.announcementFilter;
+      $$('[data-announcement-filter]').forEach(function (filterButton) {
+        filterButton.setAttribute('aria-pressed', String(filterButton === button));
+      });
+      renderAnnouncementLists();
+    });
   });
 
   refreshAnnouncements();
@@ -840,6 +992,7 @@
       audienceValue.value = '';
       $('#audienceCompact').hidden = true;
       renderSelected();
+      updatePublishButton();
       return added;
     }
 
@@ -847,6 +1000,21 @@
       audienceConfirmed = false;
       audienceValue.value = '';
       $('#audienceCompact').hidden = true;
+      updatePublishButton();
+    }
+
+    function updatePublishButton() {
+      var publishButton = $('#go');
+      var disabled = !audienceConfirmed || !audienceValue.value;
+      publishButton.setAttribute('aria-disabled', String(disabled));
+      publishButton.classList.toggle('publish-unconfirmed', disabled);
+      if (disabled) {
+        publishButton.setAttribute('title', selectedStudents.length
+          ? 'Apply / Confirm Selection before publishing'
+          : 'Select announcement recipients before publishing');
+      } else {
+        publishButton.removeAttribute('title');
+      }
     }
 
     function closeBuilder() {
@@ -923,12 +1091,14 @@
         $('#audienceCompact').hidden = true;
         closeSuggestions();
         renderSelected();
+        updatePublishButton();
       },
       restore: async function (raw) {
         this.reset();
         if (!raw) return;
         var audience = JSON.parse(raw);
         var ids = Array.isArray(audience.student_ids) ? audience.student_ids.map(String) : [];
+        var restoreAllActive = audience.mode === 'all_active';
         if (!ids.length && audience.mode === 'all_active') {
           var eligibleResult = await fetchJson('../php-connections/get-students.php?eligible_only=1');
           ids = eligibleResult.students.map(function (student) { return String(student.id); });
@@ -942,10 +1112,13 @@
           restoredRecipientWarning = 'Some saved recipients were removed because their records are missing or ineligible.';
         }
         audienceConfirmed = selectedStudents.length > 0;
-        audienceValue.value = JSON.stringify({mode:'selective', student_ids:selectedStudents.map(function (student) { return Number(student.id); })});
+        audienceValue.value = restoreAllActive
+          ? JSON.stringify({mode:'all_active'})
+          : JSON.stringify({mode:'selective', student_ids:selectedStudents.map(function (student) { return Number(student.id); })});
         renderSelected();
         if (restoredRecipientWarning) $('#audienceBuilderFeedback').textContent = restoredRecipientWarning;
         closeBuilder();
+        updatePublishButton();
       }
     };
 
@@ -1109,7 +1282,22 @@
       });
       audienceConfirmed = true;
       closeBuilder();
+      updatePublishButton();
     });
+
+    function showDashboardToast(message, type) {
+      var toast = $('#dashboardToast');
+      toast.textContent = message;
+      toast.className = 'toast ' + (type === 'error' ? 'toast-error' : 'toast-success');
+      toast.hidden = false;
+      clearTimeout(toast.hideTimer);
+      toast.hideTimer = setTimeout(function () { toast.hidden = true; }, 7000);
+    }
+
+    function showSendingOverlay(show) {
+      $('#sendingOverlay').hidden = !show;
+      document.body.classList.toggle('sending-active', show);
+    }
 
     $('#announcementForm').addEventListener('submit', async function (event) {
       var submitter = event.submitter || document.activeElement;
@@ -1121,15 +1309,22 @@
       publishDate.required = isPublish;
       if (!this.reportValidity()) return;
       if (isPublish && (!audienceConfirmed || !audienceValue.value)) {
-        announcementStatus.textContent = 'Choose and confirm recipients before publishing.';
+        announcementStatus.textContent = selectedStudents.length
+          ? 'Please click Apply / Confirm Selection to confirm your selected recipients before publishing.'
+          : 'Please select your announcement recipients before publishing.';
         announcementStatus.hidden = false;
+        showDashboardToast(announcementStatus.textContent, 'error');
         return;
       }
 
       var buttons = $$('button', this);
       this.dataset.busy = '1';
-      buttons.forEach(function (button) { button.disabled = true; });
-      announcementStatus.textContent = isPublish ? 'Publishing announcement and sending email...' : 'Saving draft...';
+      buttons.forEach(function (button) {
+        button.disabled = true;
+        if (button === submitter) button.classList.add('loading');
+      });
+      if (isPublish) showSendingOverlay(true);
+      announcementStatus.textContent = isPublish ? 'Sending announcement...' : 'Saving draft...';
       announcementStatus.hidden = false;
       try {
         var data = new FormData(this);
@@ -1155,9 +1350,12 @@
           var dashboardStatus = $('#dashboardStatus');
           dashboardStatus.textContent = announcementStatus.textContent;
           dashboardStatus.hidden = false;
+          showSendingOverlay(false);
+          showDashboardToast(announcementStatus.textContent, 'success');
           dlg.close();
         } else {
           announcementStatus.textContent = 'Draft saved. It will remain available in Drafts until you delete or publish it.';
+          showDashboardToast(announcementStatus.textContent, 'success');
         }
       } catch (error) {
         if (isPublish && error.response && error.response.announcement_id) {
@@ -1167,9 +1365,15 @@
         announcementStatus.textContent = error instanceof TypeError
           ? 'The request failed. Check your connection and try again.'
           : error.message;
+        showDashboardToast(announcementStatus.textContent, 'error');
       } finally {
+        if (isPublish) showSendingOverlay(false);
         delete this.dataset.busy;
-        buttons.forEach(function (button) { button.disabled = false; });
+        buttons.forEach(function (button) {
+          button.disabled = false;
+          button.classList.remove('loading');
+        });
+        updatePublishButton();
       }
     });
 
