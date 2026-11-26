@@ -63,18 +63,31 @@ if ($audience['mode'] === 'all_active') {
     $students = announcement_fetch_active_students($db);
 } elseif ($audience['mode'] === 'selective') {
     $studentIds = $audience['student_ids'] ?? null;
-    $batch = filter_var($audience['batch'] ?? null, FILTER_VALIDATE_INT);
-    $courseId = filter_var($audience['course_id'] ?? null, FILTER_VALIDATE_INT);
-    $sectionId = filter_var($audience['section_id'] ?? null, FILTER_VALIDATE_INT);
-    $yearLevel = is_string($audience['year_level'] ?? null) ? $audience['year_level'] : '';
+    $hasHierarchy = array_key_exists('batch', $audience)
+        || array_key_exists('course_id', $audience)
+        || array_key_exists('section_id', $audience)
+        || array_key_exists('year_level', $audience);
+    $batch = null;
+    $courseId = null;
+    $sectionId = null;
+    $yearLevel = null;
+    if ($hasHierarchy) {
+        $batch = filter_var($audience['batch'] ?? null, FILTER_VALIDATE_INT);
+        $courseId = filter_var($audience['course_id'] ?? null, FILTER_VALIDATE_INT);
+        $sectionId = filter_var($audience['section_id'] ?? null, FILTER_VALIDATE_INT);
+        $yearLevel = is_string($audience['year_level'] ?? null) ? $audience['year_level'] : '';
+    }
     if (!is_array($studentIds) || $studentIds === [] || count($studentIds) > 10000
-        || $batch === false || $batch < 1 || $courseId === false || $courseId < 1
-        || $sectionId === false || $sectionId < 1 || $yearLevel === '' || strlen($yearLevel) > 100) {
+        || ($hasHierarchy && ($batch === false || $batch < 1 || $courseId === false || $courseId < 1
+            || $sectionId === false || $sectionId < 1 || $yearLevel === '' || strlen($yearLevel) > 100))) {
         announcement_publish_response(['ok' => false, 'message' => 'Select eligible students before publishing.'], 422);
     }
 
     $validatedIds = [];
     foreach ($studentIds as $studentId) {
+        if (!is_int($studentId) && !is_string($studentId)) {
+            announcement_publish_response(['ok' => false, 'message' => 'The selected student list is invalid. Review the recipients and try again.'], 422);
+        }
         $validatedId = filter_var($studentId, FILTER_VALIDATE_INT);
         if ($validatedId === false || $validatedId < 1 || isset($validatedIds[$validatedId])) {
             announcement_publish_response(['ok' => false, 'message' => 'The selected student list is invalid. Review the recipients and try again.'], 422);
@@ -90,31 +103,34 @@ if ($audience['mode'] === 'all_active') {
         if (!announcement_student_is_eligible($student)) {
             announcement_publish_response(['ok' => false, 'message' => 'Only active/enrolled students and the designated test recipients can receive announcements.'], 422);
         }
-        if ((int) $student['enrollment_year'] !== $batch
-            || (int) $student['course_id'] !== $courseId
-            || (int) $student['section_id'] !== $sectionId
-            || $student['year_level'] !== $yearLevel
-            || $student['course_code'] === null
-            || $student['section_name'] === null) {
-            announcement_publish_response(['ok' => false, 'message' => 'The selected students do not match the confirmed, eligible batch, course, year level, and section. Review the recipients and try again.'], 422);
+        if ($hasHierarchy) {
+            if ($student['course_code'] === null || $student['section_name'] === null
+                || (int) $student['enrollment_year'] !== $batch
+                || (int) $student['course_id'] !== $courseId
+                || (int) $student['section_id'] !== $sectionId
+                || $student['year_level'] !== $yearLevel) {
+                announcement_publish_response(['ok' => false, 'message' => 'The selected students do not match the confirmed, eligible batch, course, year level, and section. Review the recipients and try again.'], 422);
+            }
         }
     }
 
-    $sectionStmt = $db->prepare('
+    if ($hasHierarchy) {
+        $sectionStmt = $db->prepare('
         SELECT COUNT(*)
         FROM sections sec
         JOIN year_levels y ON y.id = sec.year_level_id
         WHERE sec.id = :section_id
           AND sec.course_id = :course_id
           AND y.name = :year_level
-    ');
-    $sectionStmt->execute([
-        ':section_id' => $sectionId,
-        ':course_id' => $courseId,
-        ':year_level' => $yearLevel,
-    ]);
-    if ((int) $sectionStmt->fetchColumn() !== 1) {
-        announcement_publish_response(['ok' => false, 'message' => 'The selected course, year level, or section relationship is invalid.'], 422);
+        ');
+        $sectionStmt->execute([
+            ':section_id' => $sectionId,
+            ':course_id' => $courseId,
+            ':year_level' => $yearLevel,
+        ]);
+        if ((int) $sectionStmt->fetchColumn() !== 1) {
+            announcement_publish_response(['ok' => false, 'message' => 'The selected course, year level, or section relationship is invalid.'], 422);
+        }
     }
 } else {
     announcement_publish_response(['ok' => false, 'message' => 'Choose a valid recipient mode.'], 422);

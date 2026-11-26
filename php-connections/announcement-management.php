@@ -128,18 +128,29 @@ if ($action === 'save_draft') {
         }
         if ($audience['mode'] === 'selective') {
             $studentIds = $audience['student_ids'] ?? null;
-            $batch = filter_var($audience['batch'] ?? null, FILTER_VALIDATE_INT);
-            $courseId = filter_var($audience['course_id'] ?? null, FILTER_VALIDATE_INT);
-            $sectionId = filter_var($audience['section_id'] ?? null, FILTER_VALIDATE_INT);
-            $yearLevel = $audience['year_level'] ?? null;
             $seenIds = [];
-            if (!is_array($studentIds) || $studentIds === [] || count($studentIds) > 10000
-                || $batch === false || $batch < 1 || $courseId === false || $courseId < 1
-                || $sectionId === false || $sectionId < 1
-                || !is_string($yearLevel) || $yearLevel === '' || strlen($yearLevel) > 100) {
+            $hasHierarchy = array_key_exists('batch', $audience)
+                || array_key_exists('course_id', $audience)
+                || array_key_exists('section_id', $audience)
+                || array_key_exists('year_level', $audience);
+            if (!is_array($studentIds) || $studentIds === [] || count($studentIds) > 10000) {
                 announcement_management_response(['ok' => false, 'message' => 'The saved student selection is incomplete. Confirm the recipient selection first.'], 422);
             }
+            if ($hasHierarchy) {
+                $batch = filter_var($audience['batch'] ?? null, FILTER_VALIDATE_INT);
+                $courseId = filter_var($audience['course_id'] ?? null, FILTER_VALIDATE_INT);
+                $sectionId = filter_var($audience['section_id'] ?? null, FILTER_VALIDATE_INT);
+                $yearLevel = $audience['year_level'] ?? null;
+                if ($batch === false || $batch < 1 || $courseId === false || $courseId < 1
+                    || $sectionId === false || $sectionId < 1
+                    || !is_string($yearLevel) || $yearLevel === '' || strlen($yearLevel) > 100) {
+                    announcement_management_response(['ok' => false, 'message' => 'The saved student selection is incomplete. Confirm the recipient selection first.'], 422);
+                }
+            }
             foreach ($studentIds as $studentId) {
+                if (!is_int($studentId) && !is_string($studentId)) {
+                    announcement_management_response(['ok' => false, 'message' => 'The saved student selection is invalid. Review it and try again.'], 422);
+                }
                 $validatedId = filter_var($studentId, FILTER_VALIDATE_INT);
                 if ($validatedId === false || $validatedId < 1 || isset($seenIds[$validatedId])) {
                     announcement_management_response(['ok' => false, 'message' => 'The saved student selection is invalid. Review it and try again.'], 422);

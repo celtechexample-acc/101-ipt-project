@@ -26,8 +26,10 @@ function announcement_fetch_active_students(PDO $db, ?array $studentIds = null):
         FROM students s
         LEFT JOIN courses c ON c.id = s.course_id
         LEFT JOIN sections sec ON sec.id = s.section_id
-        WHERE UPPER(TRIM(s.student_status)) IN (\'ACTIVE\', \'ENROLLED\')
-          AND s.is_sample = 0
+        WHERE (
+            (UPPER(TRIM(s.student_status)) IN (\'ACTIVE\', \'ENROLLED\') AND s.is_sample = 0)
+            OR s.id IN (' . implode(', ', ANNOUNCEMENT_TEST_STUDENT_IDS) . ')
+        )
     ';
     $parameters = [];
 

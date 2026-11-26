@@ -207,6 +207,9 @@
   #create .wizard-actions .btn:disabled, #create .text-button:disabled { opacity:.5; cursor:not-allowed; box-shadow:none; }
   #create .student-panel { grid-column:1/-1; min-width:0; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:#fff; }
   #create .student-toolbar { padding:9px; border-bottom:1px solid var(--line); background:#fbfefc; }
+  #create .filter-field { display:grid; grid-column:1/-1; gap:6px; color:var(--ink); font-size:12px; font-weight:700; }
+  #create .filter-field select { width:100%; min-height:40px; border:1.5px solid var(--line); border-radius:11px; padding:0 11px; color:var(--ink); background:#fff; font:inherit; font-size:13px; }
+  #create .select-all-scope { justify-self:start; }
   #create .search-students { position:relative; display:block; }
   #create .search-students svg { position:absolute; top:10px; left:12px; z-index:1; color:var(--muted); }
   #create .search-students input { width:100%; height:38px; border:1px solid var(--line); border-radius:10px; padding:0 11px 0 37px; font:inherit; font-size:13px; color:var(--ink); background:#fff; }
@@ -233,6 +236,12 @@
   #create .summary-row b { flex:none; }
   #create .summary-row span { text-align:right; color:var(--muted); }
   #create .audience-summary .edit-audience-flow { margin-top:8px; }
+  #create .selected-recipient-list { max-height:240px; overflow:auto; }
+  #create .selected-recipient { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid #edf3ee; }
+  #create .selected-recipient strong, #create .selected-recipient small { display:block; }
+  #create .selected-recipient strong { font-size:12px; }
+  #create .selected-recipient small { color:var(--muted); font-size:10.5px; margin-top:2px; }
+  #create .review-recipient-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:10px; }
   #create .demo-warning { margin-top:9px; color:var(--muted); font-size:11px; }
   #create .audience-compact { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 13px; border:1px solid #b7dfc3; border-radius:13px; background:#f0faf3; }
   #create .audience-compact strong, #create .audience-compact small { display:block; }

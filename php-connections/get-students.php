@@ -17,17 +17,21 @@ if (!isset($_SESSION['user_id']) || !is_osa_admin($db)) {
 
 require_once __DIR__ . '/announcement-recipient-common.php';
 
-$batch = filter_var($_GET['batch'] ?? null, FILTER_VALIDATE_INT);
-$courseId = filter_var($_GET['course_id'] ?? null, FILTER_VALIDATE_INT);
-$sectionId = filter_var($_GET['section_id'] ?? null, FILTER_VALIDATE_INT);
+$batchRaw = is_string($_GET['batch'] ?? null) ? trim($_GET['batch']) : '';
+$courseRaw = is_string($_GET['course_id'] ?? null) ? trim($_GET['course_id']) : '';
+$sectionRaw = is_string($_GET['section_id'] ?? null) ? trim($_GET['section_id']) : '';
+$batch = $batchRaw === '' ? null : filter_var($batchRaw, FILTER_VALIDATE_INT);
+$courseId = $courseRaw === '' ? null : filter_var($courseRaw, FILTER_VALIDATE_INT);
+$sectionId = $sectionRaw === '' ? null : filter_var($sectionRaw, FILTER_VALIDATE_INT);
 $yearLevel = trim(is_string($_GET['year_level'] ?? null) ? $_GET['year_level'] : '');
 $search = trim(is_string($_GET['search'] ?? null) ? $_GET['search'] : '');
 $search = substr($search, 0, 100);
+$eligibleOnly = ($_GET['eligible_only'] ?? '') === '1';
 
-if ($batch === false || $batch < 1
-    || $courseId === false || $courseId < 1
-    || $sectionId === false || $sectionId < 1
-    || $yearLevel === '' || strlen($yearLevel) > 100) {
+if (($batch !== null && ($batch === false || $batch < 1))
+    || ($courseId !== null && ($courseId === false || $courseId < 1))
+    || ($sectionId !== null && ($sectionId === false || $sectionId < 1))
+    || strlen($yearLevel) > 100) {
     http_response_code(422);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(['ok' => false, 'message' => 'Invalid student filters.'], JSON_THROW_ON_ERROR);
@@ -39,13 +43,13 @@ $stmt = $db->prepare('
            s.email, s.student_status, s.is_sample,
            c.code AS course_code, sec.name AS section_name
     FROM students s
-    JOIN courses c ON c.id = s.course_id
-    JOIN sections sec ON sec.id = s.section_id
-    WHERE s.enrollment_year = :batch
-      AND s.course_id = :course_id
-      AND s.year_level = :year_level
-      AND s.section_id = :section_id
-      AND (:search = "" OR s.student_name LIKE :search_like)
+    LEFT JOIN courses c ON c.id = s.course_id
+    LEFT JOIN sections sec ON sec.id = s.section_id
+    WHERE (:batch IS NULL OR s.enrollment_year = :batch)
+      AND (:course_id IS NULL OR s.course_id = :course_id)
+      AND (:year_level = "" OR s.year_level = :year_level)
+      AND (:section_id IS NULL OR s.section_id = :section_id)
+      AND (:search = "" OR s.student_name LIKE :search_like OR CAST(s.id AS TEXT) LIKE :search_like)
     ORDER BY s.student_name ASC
 ');
 $stmt->execute([
@@ -61,12 +65,20 @@ $students = array_map(static function (array $student): array {
     return [
         'id' => (int) $student['id'],
         'student_name' => $student['student_name'],
+        'enrollment_year' => (int) $student['enrollment_year'],
+        'year_level' => $student['year_level'],
         'course_code' => $student['course_code'],
         'section_name' => $student['section_name'],
         'has_valid_email' => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
         'eligible_for_announcement' => announcement_student_is_eligible($student),
     ];
 }, $stmt->fetchAll());
+if ($eligibleOnly) {
+    $students = array_values(array_filter(
+        $students,
+        static fn(array $student): bool => $student['eligible_for_announcement'] && $student['has_valid_email']
+    ));
+}
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');
