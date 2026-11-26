@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OSA Dashboard</title>
 <link rel="stylesheet" href="../css-folder/osa-dashboard.css">
+<link rel="stylesheet" href="../css-folder/request-portals.css">
+<meta name="csrf-token" content="__CSRF_TOKEN__">
 </head>
 <body>
 
@@ -24,6 +26,7 @@
 
     <a href="#drafts" data-go="drafts">Drafts <span class="count"></span></a>
     <a href="#published" data-go="published">History</a>
+    <a href="#requests" data-go="requests">Request <span class="count" id="requestNavCount"></span></a>
   </nav>
 
   <div class="spacer"></div>
@@ -58,6 +61,10 @@
     <div class="cards">
       <a class="card panel" href="#drafts"><span>Saved drafts</span><strong id="draftCount">0</strong><em>Continue editing announcements</em></a>
       <a class="card panel" href="#published"><span>Announcement history</span><strong id="announcementCount">0</strong><em>Review publishing and delivery results</em></a>
+      <a class="card panel request-summary-card" href="#requests" data-request-status="pending"><span>Pending requests</span><strong id="requestPendingCount">0</strong><em>Review new requests</em></a>
+      <a class="card panel request-summary-card" href="#requests" data-request-status="for_principal_approval"><span>For Principal Approval</span><strong id="requestPrincipalCount">0</strong><em>Awaiting Principal action</em></a>
+      <a class="card panel request-summary-card" href="#requests" data-request-status="approved"><span>Approved requests</span><strong id="requestApprovedCount">0</strong><em>View approved requests</em></a>
+      <a class="card panel request-summary-card" href="#requests" data-request-status="denied"><span>Denied requests</span><strong id="requestDeniedCount">0</strong><em>View denied requests</em></a>
     </div>
 
     <section class="panel" aria-labelledby="ah">
@@ -87,7 +94,25 @@
     <div class="sec-head"><h2>Announcement history</h2></div>
     <div class="scroll"><table><thead><tr><th>Title</th><th>Audience</th><th>Date</th><th>Status</th><th>Sent</th><th>Failed</th><th>Recipients</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
   </section>
+
+  <section class="view panel portal-content" id="v-requests" hidden data-title="Requests" data-sub="Review Teacher and Officer requests and route selected items for approval.">
+    <div class="sec-head"><div><h2>Request Management</h2><p class="hint">Review requests submitted by Teachers and Officers.</p></div><button class="btn ghost sm" id="refreshAdminRequests" type="button">Refresh</button></div>
+    <div class="request-tabs" role="group" aria-label="Filter by requester role">
+      <button type="button" data-request-role="All" aria-pressed="true">All Requests</button>
+      <button type="button" data-request-role="Teacher" aria-pressed="false">Teacher Requests</button>
+      <button type="button" data-request-role="Officer" aria-pressed="false">Officer Requests</button>
+    </div>
+    <div class="two request-filter-row"><div class="fld"><label for="requestStatusFilter">Request status</label><select id="requestStatusFilter"><option value="All">All statuses</option><option value="pending">Pending</option><option value="for_principal_approval">For Principal Approval</option><option value="approved">Approved</option><option value="denied">Denied</option></select></div></div>
+    <p class="form-message" id="requestPageStatus" role="status" aria-live="polite" hidden></p>
+    <div class="request-list" id="adminRequests" aria-live="polite"><div class="empty box"><b>Loading requests</b>Request records will appear here.</div></div>
+  </section>
 </main>
+
+<dialog class="request-detail-dialog" id="adminRequestDetails" aria-labelledby="adminRequestDetailTitle"><article class="request-detail">
+  <div class="request-detail-head"><div><h2 id="adminRequestDetailTitle"></h2><span class="status-badge" id="adminRequestDetailStatus"></span></div><button class="request-detail-close" type="button" data-close-admin-detail aria-label="Close details">×</button></div>
+  <dl class="request-detail-grid" id="adminRequestDetailFields"></dl><div class="request-message" id="adminRequestDetailMessage"></div>
+  <div class="request-detail-actions" id="adminRequestDetailActions"></div>
+</article></dialog>
 
 <!-- ============ MODAL: CREATE ANNOUNCEMENT ============ -->
 <dialog id="create" aria-labelledby="ct">
@@ -1100,5 +1125,7 @@
   })();
 
 })();
-</script></body>
+</script>
+<script src="osa-request-dashboard.js" defer></script>
+</body>
 </html>

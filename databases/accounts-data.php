@@ -82,4 +82,6 @@ if (is_file($studentSqlPath)) {
 
 require_once __DIR__ . '/announcement-schema.php';
 ensure_announcement_schema($db);
+require_once __DIR__ . '/request-schema.php';
+ensure_request_schema($db);
 ?>
