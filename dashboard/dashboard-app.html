@@ -18,7 +18,7 @@
   <div class="brand"><div class="logo"><i></i></div><div><b>OSSA Portal</b><small>Announcements</small></div></div>
 
   <nav aria-label="Main menu">
-    <a href="#" class="cta" data-modal>Create announcement</a>
+    <a href="#" class="cta" data-modal>Announcement Center</a>
     
     <a href="#dashboard" data-go="dashboard" aria-current="page">Dashboard</a>
     <!-- opens the modal instead of a page -->
@@ -47,16 +47,16 @@
       </div>
     </div>
     <div class="hero">
-      <div><small>OSSA DASHBOARD</small><h1 id="pageTitle">Welcome back</h1><p id="pageSub">Choose an action to get started.</p></div>
+      <div><small>OSSA DASHBOARD</small><h1 id="pageTitle">Announcement Center</h1><p id="pageSub">Create, manage, and publish official student announcements.</p></div>
       <div class="acts">
-        <a class="btn light" href="#" data-modal>Create announcement</a>
+        <a class="btn light" href="#" data-modal>Announcement Center</a>
         <a class="btn line" href="#published">Announcement history</a>
       </div>
     </div>
   </header>
 
   <!-- ============ VIEW: DASHBOARD ============ -->
-  <div class="view stack" id="v-dashboard" data-title="Welcome back" data-sub="Manage OSA announcements and review email delivery results.">
+  <div class="view stack" id="v-dashboard" data-title="Announcement Center" data-sub="Create, manage, and publish official student announcements.">
     <p class="hint" id="dashboardStatus" role="status" aria-live="polite" hidden></p>
     <div class="cards">
       <a class="card panel" href="#drafts"><span>Saved drafts</span><strong id="draftCount">0</strong><em>Continue editing announcements</em></a>
@@ -128,8 +128,9 @@
     <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
     <input type="hidden" name="announcement_id" id="announcementId">
     <input type="hidden" name="publish_request_id" id="publishRequestId">
+    <input type="hidden" name="publication_mode" id="publicationMode" value="direct">
     <div class="dlg-h">
-      <div><h2 id="ct">Create announcement</h2><p>Enter the announcement details and confirm the student recipients.</p></div>
+      <div><h2 id="ct">Compose Announcement</h2><p>Create, manage, and publish official student announcements.</p></div>
       <button class="x" type="button" data-close-modal aria-label="Close">&times;</button>
     </div>
 
@@ -140,7 +141,7 @@
       <section class="audience-box" aria-labelledby="audienceLabel">
         <div class="audience-intro">
           <div>
-            <span class="lbl" id="audienceLabel">Target Audience</span>
+            <span class="lbl" id="audienceLabel">Select Recipients</span>
             <p class="hint">Choose a batch scope, then narrow by course, year level, and section or search individual students. Only active/enrolled non-sample records and the two designated demo accounts can receive email.</p>
           </div>
           <button class="btn ghost sm" type="button" id="openAudience">Choose audience</button>
@@ -183,7 +184,7 @@
           </div>
           <div class="audience-builder-actions">
             <p id="audienceBuilderFeedback" role="status" aria-live="polite"></p>
-            <button type="button" class="btn green" id="confirmAudience" disabled>Apply Selection</button>
+            <button type="button" class="btn green" id="confirmAudience" disabled>Apply Recipient Selection</button>
           </div>
           <p class="recipient-selection-summary" id="recipientSelectionSummary" role="status" aria-live="polite"></p>
           <p class="demo-warning" role="status">Recipient selection only. No emails will be sent until you publish the announcement.</p>
@@ -204,7 +205,8 @@
     <div class="dlg-f">
       <button class="btn ghost" type="button" data-close-modal>Cancel</button>
       <button class="btn ghost" type="submit" value="draft" id="saveDraft">Save draft</button>
-      <button class="btn green" type="submit" value="submit" id="go" aria-disabled="true">Publish announcement</button>
+      <button class="btn ghost" type="submit" value="review" id="requestPrincipalReview" aria-disabled="true">Request Principal Review</button>
+      <button class="btn green" type="submit" value="submit" id="go" aria-disabled="true">Publish Now</button>
     </div>
   </form>
 </dialog>
@@ -579,6 +581,23 @@
     $('#announcementStatus').hidden = true;
     $('#announcementStatus').textContent = '';
     await window.announcementAudience.restore(announcement.audience_json);
+    try {
+      var reviewResult = await requestJson('../php-connections/announcement-management.php?action=review_status&id=' + encodeURIComponent(id));
+      var latestReview = reviewResult.reviews[0] || null;
+      $('#publicationMode').value = latestReview && latestReview.status === 'approved' ? 'approved_review' : 'direct';
+      if (latestReview) {
+        var reviewLabels = {
+          pending:'Pending Principal Review',
+          approved:'Approved – Ready to Publish',
+          changes_requested:'Changes Requested'
+        };
+        $('#announcementStatus').textContent = reviewLabels[latestReview.status] +
+          (latestReview.review_note ? ' — Principal Review Notes: ' + latestReview.review_note : '');
+        $('#announcementStatus').hidden = false;
+      }
+    } catch (_) {
+      $('#publicationMode').value = 'direct';
+    }
     publishDate.required = false;
     setNav(false);
     dlg.showModal();
@@ -591,9 +610,10 @@
     publishDate.value = today;
     publishDate.required = false;
     updatePublishDateStatus();
-    $('#ct').textContent = 'Create announcement';
+    $('#ct').textContent = 'Compose Announcement';
     $('#announcementStatus').hidden = true;
     $('#announcementStatus').textContent = '';
+    $('#publicationMode').value = 'direct';
     window.announcementAudience.reset();
     setNav(false);
     dlg.showModal();
@@ -1005,9 +1025,12 @@
 
     function updatePublishButton() {
       var publishButton = $('#go');
+      var reviewButton = $('#requestPrincipalReview');
       var disabled = !audienceConfirmed || !audienceValue.value;
       publishButton.setAttribute('aria-disabled', String(disabled));
+      reviewButton.setAttribute('aria-disabled', String(disabled));
       publishButton.classList.toggle('publish-unconfirmed', disabled);
+      reviewButton.classList.toggle('publish-unconfirmed', disabled);
       if (disabled) {
         publishButton.setAttribute('title', selectedStudents.length
           ? 'Apply / Confirm Selection before publishing'
@@ -1301,17 +1324,16 @@
 
     $('#announcementForm').addEventListener('submit', async function (event) {
       var submitter = event.submitter || document.activeElement;
-      if (!submitter || (submitter.id !== 'go' && submitter.id !== 'saveDraft')) return;
+      if (!submitter || (submitter.id !== 'go' && submitter.id !== 'saveDraft' && submitter.id !== 'requestPrincipalReview')) return;
       event.preventDefault();
       if (this.dataset.busy) return;
       var announcementStatus = $('#announcementStatus');
       var isPublish = submitter.id === 'go';
-      publishDate.required = isPublish;
+      var isReview = submitter.id === 'requestPrincipalReview';
+      publishDate.required = isPublish || isReview;
       if (!this.reportValidity()) return;
-      if (isPublish && (!audienceConfirmed || !audienceValue.value)) {
-        announcementStatus.textContent = selectedStudents.length
-          ? 'Please click Apply / Confirm Selection to confirm your selected recipients before publishing.'
-          : 'Please select your announcement recipients before publishing.';
+      if ((isPublish || isReview) && (!audienceConfirmed || !audienceValue.value)) {
+        announcementStatus.textContent = 'Please apply and confirm your recipient selection before continuing.';
         announcementStatus.hidden = false;
         showDashboardToast(announcementStatus.textContent, 'error');
         return;
@@ -1328,12 +1350,12 @@
       announcementStatus.hidden = false;
       try {
         var data = new FormData(this);
-        data.set('action', isPublish ? 'publish' : 'save_draft');
+        data.set('action', isPublish ? 'publish' : (isReview ? 'request_principal_review' : 'save_draft'));
         var result;
         try {
-          result = await requestJson(isPublish
+          result = await requestJson((isPublish
             ? '../php-connections/publish-announcement.php'
-            : '../php-connections/announcement-management.php', {method:'POST', body:data});
+            : '../php-connections/announcement-management.php'), {method:'POST', body:data});
         } catch (error) {
           var delivery = error.response || {};
           if (isPublish && (typeof delivery.sent_count === 'number' || typeof delivery.failed_count === 'number')) {
@@ -1353,6 +1375,10 @@
           showSendingOverlay(false);
           showDashboardToast(announcementStatus.textContent, 'success');
           dlg.close();
+        } else if (isReview) {
+          $('#publicationMode').value = 'approved_review';
+          announcementStatus.textContent = 'Pending Principal Review. No emails have been sent.';
+          showDashboardToast(announcementStatus.textContent, 'success');
         } else {
           announcementStatus.textContent = 'Draft saved. It will remain available in Drafts until you delete or publish it.';
           showDashboardToast(announcementStatus.textContent, 'success');

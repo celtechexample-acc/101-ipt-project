@@ -6,6 +6,7 @@
   var requestsElement = document.getElementById('principalRequests');
   var detailDialog = document.getElementById('principalDetails');
   var selectedRequest = null;
+  var selectedAnnouncementReview = null;
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
@@ -123,10 +124,139 @@
     }
   }
 
+  function audienceLabel(raw) {
+    try {
+      var audience = JSON.parse(raw);
+      if (audience.mode === 'all_active') return 'All active students';
+      if (audience.mode === 'selective') return (audience.student_ids || []).length + ' selected students';
+    } catch (_) {}
+    return 'Recipient selection saved';
+  }
+
+  function openAnnouncementReview(review) {
+    selectedAnnouncementReview = review;
+    document.getElementById('principalDetailTitle').textContent = review.title;
+    var badge = document.getElementById('principalDetailStatus');
+    badge.className = 'status-badge ' + review.review_status;
+    badge.textContent = review.review_status === 'approved'
+      ? 'Approved – Ready to Publish'
+      : review.review_status === 'changes_requested'
+        ? 'Changes Requested'
+        : 'Pending Principal Review';
+    var fields = document.getElementById('principalDetailFields');
+    fields.replaceChildren();
+    addDetail('Submitting OSA Admin', review.submitted_by_name);
+    addDetail('Publish date', review.publish_date || '—');
+    addDetail('Audience', audienceLabel(review.audience_json));
+    addDetail('Selected recipients', String((function () {
+      try {
+        var audience = JSON.parse(review.audience_json);
+        return audience.mode === 'all_active' ? 'All active students' : (audience.student_ids || []).length;
+      } catch (_) { return '—'; }
+    })()));
+    addDetail('Submitted', displayDate(review.submitted_at));
+    if (review.reviewed_at) addDetail('Reviewed', displayDate(review.reviewed_at));
+    document.getElementById('principalDetailMessage').textContent = review.details;
+    var actions = document.getElementById('principalDetailActions');
+    actions.replaceChildren();
+    var closeButton = document.createElement('button');
+    closeButton.className = 'btn ghost';
+    closeButton.type = 'button';
+    closeButton.textContent = 'Close';
+    closeButton.addEventListener('click', function () { detailDialog.close(); });
+    actions.appendChild(closeButton);
+    if (review.review_status === 'pending') {
+      var note = document.createElement('textarea');
+      note.id = 'principalReviewNote';
+      note.placeholder = 'Explain the changes or corrections required before this announcement can be approved.';
+      note.setAttribute('aria-label', 'Principal Review Notes');
+      note.style.cssText = 'width:100%;min-height:90px;margin:10px 0;';
+      document.getElementById('principalDetailMessage').appendChild(note);
+      var changesButton = document.createElement('button');
+      changesButton.className = 'btn ghost';
+      changesButton.type = 'button';
+      changesButton.textContent = 'Request Changes';
+      changesButton.addEventListener('click', function () { decideAnnouncement('changes_requested', note.value); });
+      var approveButton = document.createElement('button');
+      approveButton.className = 'btn green';
+      approveButton.type = 'button';
+      approveButton.textContent = 'Approve';
+      approveButton.addEventListener('click', function () { decideAnnouncement('approved', note.value); });
+      actions.appendChild(changesButton);
+      actions.appendChild(approveButton);
+    }
+    detailDialog.showModal();
+  }
+
+  async function decideAnnouncement(decision, note) {
+    if (!selectedAnnouncementReview) return;
+    if (decision === 'changes_requested' && !note.trim()) {
+      window.alert('Principal Review Notes are required when requesting changes.');
+      return;
+    }
+    var data = new FormData();
+    data.set('csrf_token', csrfToken);
+    data.set('action', 'principal_decision');
+    data.set('review_id', String(selectedAnnouncementReview.review_id));
+    data.set('decision', decision);
+    data.set('review_note', note.trim());
+    try {
+      await requestJson('../php-connections/announcement-management.php', {method:'POST', body:data});
+      detailDialog.close();
+      await refreshAnnouncementReviews();
+    } catch (error) {
+      window.alert(error.message);
+    }
+  }
+
+  async function refreshAnnouncementReviews() {
+    var element = document.getElementById('principalAnnouncementReviews');
+    element.innerHTML = '<div class="empty box"><b>Loading announcement reviews</b>Checking submitted announcement plans.</div>';
+    try {
+      var result = await requestJson('../php-connections/announcement-management.php?action=principal_list');
+      element.replaceChildren();
+      if (!result.reviews.length) {
+        element.innerHTML = '<div class="empty box"><b>No announcement reviews</b>Plans submitted by the OSSA admin will appear here.</div>';
+        return;
+      }
+      result.reviews.forEach(function (review) {
+        var card = document.createElement('article');
+        card.className = 'panel request-card';
+        var label = review.review_status === 'approved'
+          ? 'Approved – Ready to Publish'
+          : review.review_status === 'changes_requested'
+            ? 'Changes Requested'
+            : 'Pending Principal Review';
+        card.innerHTML = '<div><span class="status-badge ' + escapeHtml(review.review_status) + '">' + escapeHtml(label) + '</span>' +
+          '<h3>' + escapeHtml(review.title) + '</h3><div class="request-card-meta"><span>' +
+          escapeHtml(review.submitted_by_name) + '</span><span>' + escapeHtml(audienceLabel(review.audience_json)) +
+          '</span><span>Publish date: ' + escapeHtml(review.publish_date || '—') + '</span><span>' +
+          escapeHtml(displayDate(review.submitted_at)) + '</span></div>' +
+          (review.review_note ? '<p class="hint">Principal Review Notes: ' + escapeHtml(review.review_note) + '</p>' : '') +
+          '</div><div class="request-card-actions"><button class="btn ghost sm" type="button">Review Plan</button></div>';
+        card.querySelector('button').addEventListener('click', function () { openAnnouncementReview(review); });
+        element.appendChild(card);
+      });
+    } catch (error) {
+      element.innerHTML = '<div class="empty box" role="alert"><b>Announcement reviews could not be loaded</b>' + escapeHtml(error.message) + '</div>';
+    }
+  }
+
   document.getElementById('refreshApprovals').addEventListener('click', refreshRequests);
+  document.getElementById('refreshAnnouncementReviews').addEventListener('click', refreshAnnouncementReviews);
+  document.querySelectorAll('[data-go]').forEach(function (link) {
+    link.addEventListener('click', function () {
+      var target = link.getAttribute('href').slice(1);
+      document.querySelectorAll('.view').forEach(function (view) { view.hidden = view.id !== 'v-' + target; });
+      document.querySelectorAll('[data-go]').forEach(function (item) {
+        item.setAttribute('aria-current', item === link ? 'page' : 'false');
+      });
+    });
+  });
   document.addEventListener('click', function (event) {
     if (event.target.closest('[data-close-principal]')) detailDialog.close();
   });
   detailDialog.addEventListener('click', function (event) { if (event.target === detailDialog) detailDialog.close(); });
   refreshRequests();
+  refreshAnnouncementReviews();
 })();

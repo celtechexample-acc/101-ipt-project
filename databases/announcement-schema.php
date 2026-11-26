@@ -31,6 +31,24 @@ function ensure_announcement_schema(PDO $db): void
         ");
         $db->exec('CREATE INDEX IF NOT EXISTS announcements_owner_status ON announcements(created_by, status, updated_at DESC)');
         $db->exec('CREATE INDEX IF NOT EXISTS announcements_created_at ON announcements(created_at DESC)');
+        $db->exec("
+            CREATE TABLE IF NOT EXISTS announcement_approval_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                announcement_id TEXT NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+                submitted_by INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+                version_hash TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('pending', 'approved', 'changes_requested')
+                ),
+                review_note TEXT NOT NULL DEFAULT '',
+                reviewed_by INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+                submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at TEXT,
+                UNIQUE (announcement_id, version_hash)
+            )
+        ");
+        $db->exec('CREATE INDEX IF NOT EXISTS announcement_approval_status ON announcement_approval_requests(status, submitted_at DESC)');
+        $db->exec('CREATE INDEX IF NOT EXISTS announcement_approval_announcement ON announcement_approval_requests(announcement_id, submitted_at DESC)');
 
         $db->exec("
             CREATE TABLE IF NOT EXISTS announcement_recipients (

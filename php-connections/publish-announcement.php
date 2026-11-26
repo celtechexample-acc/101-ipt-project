@@ -8,6 +8,22 @@ require_once __DIR__ . '/mailer.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, private');
 
+function announcement_publish_version_hash(string $title, string $details, string $publishDate, array $audience): string
+{
+    ksort($audience);
+    if (isset($audience['student_ids']) && is_array($audience['student_ids'])) {
+        $ids = array_map('intval', $audience['student_ids']);
+        sort($ids);
+        $audience['student_ids'] = $ids;
+    }
+    return hash('sha256', json_encode([
+        'title' => $title,
+        'details' => $details,
+        'publish_date' => $publishDate,
+        'audience' => $audience,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
 function announcement_publish_response(array $payload, int $status = 200): never
 {
     http_response_code($status);
@@ -65,6 +81,10 @@ try {
 }
 if (!is_array($audience) || !is_string($audience['mode'] ?? null)) {
     announcement_publish_response(['ok' => false, 'message' => 'Confirm the recipient selection before publishing.'], 422);
+}
+$publicationMode = is_string($_POST['publication_mode'] ?? null) ? $_POST['publication_mode'] : 'direct';
+if (!in_array($publicationMode, ['direct', 'approved_review'], true)) {
+    announcement_publish_response(['ok' => false, 'message' => 'Choose a valid publication method.'], 422);
 }
 
 if ($audience['mode'] === 'all_active') {
@@ -142,6 +162,34 @@ if ($audience['mode'] === 'all_active') {
     }
 } else {
     announcement_publish_response(['ok' => false, 'message' => 'Choose a valid recipient mode.'], 422);
+}
+
+if ($publicationMode === 'approved_review') {
+    if ($announcementId === '') {
+        announcement_publish_response(['ok' => false, 'message' => 'This announcement must be submitted and approved before publication.'], 422);
+    }
+    $versionHash = announcement_publish_version_hash($title, $details, $date, $audience);
+    $approvalStmt = $db->prepare("
+        SELECT 1
+        FROM announcement_approval_requests r
+        JOIN announcements a ON a.id = r.announcement_id
+        WHERE r.announcement_id = :announcement_id
+          AND r.version_hash = :version_hash
+          AND r.status = 'approved'
+          AND r.reviewed_at IS NOT NULL
+          AND r.reviewed_by IS NOT NULL
+          AND r.submitted_by != r.reviewed_by
+          AND a.created_by = :created_by
+        LIMIT 1
+    ");
+    $approvalStmt->execute([
+        ':announcement_id' => $announcementId,
+        ':version_hash' => $versionHash,
+        ':created_by' => $adminId,
+    ]);
+    if ($approvalStmt->fetchColumn() === false) {
+        announcement_publish_response(['ok' => false, 'message' => 'This announcement has not been approved in its current version. Submit it for Principal review again.'], 409);
+    }
 }
 
 $summary = announcement_recipient_summary($students);

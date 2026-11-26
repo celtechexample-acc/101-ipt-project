@@ -593,3 +593,12 @@ This is a documentation preparation and guidance task, not a request to write th
 
 
    open the page   php -S 0.0.0.0:8000   OR if locall server http://localhost/IPT101-project/portals/Ossa-login.php
+ 
+ push process to push terminal of main
+
+ git status
+git add .
+git status
+git commit -m "Update announcement features"
+git pull --no-rebase origin main
+git push origin main
