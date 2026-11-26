@@ -46,8 +46,16 @@ if ($date === '' || !preg_match('/^[a-f0-9]{32}$/', $requestId)
     announcement_publish_response(['ok' => false, 'message' => 'Complete the publish date and refresh the form before publishing.'], 422);
 }
 $publishDate = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
-if ($publishDate === false || $publishDate->format('Y-m-d') !== $date || $date !== date('Y-m-d')) {
-    announcement_publish_response(['ok' => false, 'message' => 'Publishing sends email immediately. Choose today\'s date to continue.'], 422);
+$today = (new DateTimeImmutable(
+    'now',
+    new DateTimeZone('Asia/Manila')
+))->format('Y-m-d');
+
+if ($publishDate === false || $publishDate->format('Y-m-d') !== $date || $date !== $today) {
+    announcement_publish_response([
+        'ok' => false,
+        'message' => 'Publishing sends email immediately. Choose today\'s date to continue.'
+    ], 422);
 }
 
 try {
