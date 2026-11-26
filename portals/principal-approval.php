@@ -43,6 +43,6 @@ $csrfToken = htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8');
   <dl class="request-detail-grid" id="principalDetailFields"></dl><div class="request-message" id="principalDetailMessage"></div>
   <div class="request-detail-actions" id="principalDetailActions"><button class="btn ghost" type="button" data-close-principal>Close</button></div>
 </article></dialog>
-<script src="principal-approval.js" defer></script>
+<script src="../js-folder/principal-approval.js" defer></script>
 </body>
 </html>

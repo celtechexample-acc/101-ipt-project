@@ -62,6 +62,6 @@ $portalRoleHtml = htmlspecialchars($portalRole, ENT_QUOTES, 'UTF-8');
   <dl class="request-detail-grid" id="requestDetailFields"></dl><div class="request-message" id="requestDetailMessage"></div>
   <div class="request-detail-actions"><button class="btn ghost" type="button" data-close-detail>Close</button></div>
 </article></dialog>
-<script src="request-portal.js" defer></script>
+<script src="../js-folder/request-portal.js" defer></script>
 </body>
 </html>
