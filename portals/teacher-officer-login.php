@@ -40,6 +40,6 @@
   </form>
   <p class="login-footnote">Demonstration account access</p>
 </main>
-<script src="teacher-officer-login.js" defer></script>
+<script src="../js-folder/teacher-officer-login.js" defer></script>
 </body>
 </html>

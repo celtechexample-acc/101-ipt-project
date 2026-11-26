@@ -150,10 +150,10 @@
             <div class="audience-suggestions" id="audienceSuggestions" role="listbox" hidden></div>
           </div>
           <div class="audience-filter-grid">
-            <label class="filter-field">Select Batch<select id="batchSelect"><option value="">All Batches</option></select></label>
-            <label class="filter-field">Select Course<select id="courseSelect"><option value="">All Courses</option></select></label>
-            <label class="filter-field">Select Grade / Year Level<select id="yearLevelSelect"><option value="">All Year Levels</option></select></label>
-            <label class="filter-field">Select Section<select id="sectionSelect"><option value="">All Sections</option></select></label>
+            <div class="filter-field"><span>Select Batch</span><select id="batchSelect"><option value="">All Batches</option></select></div>
+            <div class="filter-field"><span>Select Course</span><select id="courseSelect"><option value="">All Courses</option></select></div>
+            <div class="filter-field"><span>Select Grade / Year Level</span><select id="yearLevelSelect"><option value="">All Year Levels</option></select></div>
+            <div class="filter-field"><span>Select Section</span><select id="sectionSelect"><option value="">All Sections</option></select></div>
           </div>
           <div class="audience-builder-layout">
             <section class="student-panel" aria-labelledby="matchingStudentsTitle">
@@ -175,8 +175,10 @@
           </div>
           <div class="audience-builder-actions">
             <p id="audienceBuilderFeedback" role="status" aria-live="polite"></p>
-            <button type="button" class="btn green" id="confirmAudience" disabled>Confirm Selected Recipients</button>
+            <button type="button" class="btn green" id="confirmAudience" disabled>Apply Selection</button>
           </div>
+          <p class="recipient-selection-summary" id="recipientSelectionSummary" role="status" aria-live="polite"></p>
+          <p class="demo-warning" role="status">Recipient selection only. No emails will be sent until you publish the announcement.</p>
         </div>
         <input type="hidden" name="audience" id="audienceValue">
       </section>
@@ -429,7 +431,7 @@
       panel.appendChild(title);
       var summary = document.createElement('p');
       summary.textContent = 'Emails sent: ' + announcement.sent_count + ' · Failed: ' + announcement.failed_count +
-        ' · Excluded: ' + announcement.excluded_count;
+        ' · Skipped (invalid or duplicate email): ' + announcement.excluded_count;
       panel.appendChild(summary);
       if (!result.recipients.length) {
         panel.appendChild(document.createTextNode('No recipient delivery records are available.'));
@@ -559,6 +561,137 @@
       });
     }
 
+    function createFilterDropdown(select) {
+      var labelText = select.parentElement.querySelector('span').textContent.trim();
+      var menuId = select.id + 'Options';
+      var wrapper = document.createElement('div');
+      wrapper.className = 'filter-dropdown';
+      wrapper.innerHTML = '<button type="button" class="filter-dropdown-trigger" role="combobox" aria-label="' +
+        escapeHtml(labelText) + '" aria-haspopup="listbox" aria-expanded="false" aria-controls="' + menuId + '">' +
+        '<span class="filter-dropdown-value"></span><span class="filter-dropdown-chevron" aria-hidden="true"></span></button>' +
+        '<div class="filter-dropdown-menu" hidden>' +
+        '<div class="filter-dropdown-search">' +
+        '<input type="search" autocomplete="off" placeholder="Search options..." aria-label="Search ' + escapeHtml(labelText) + '">' +
+        '</div><div class="filter-dropdown-options" id="' + menuId + '" role="listbox" aria-label="' + escapeHtml(labelText) + '"></div></div>';
+      select.classList.add('filter-native-select');
+      select.setAttribute('aria-hidden', 'true');
+      select.tabIndex = -1;
+      select.insertAdjacentElement('afterend', wrapper);
+
+      var trigger = wrapper.querySelector('.filter-dropdown-trigger');
+      var menu = wrapper.querySelector('.filter-dropdown-menu');
+      var search = wrapper.querySelector('input[type="search"]');
+      var options = wrapper.querySelector('.filter-dropdown-options');
+      var closeTimer;
+
+      function filteredOptions() {
+        var query = search.value.trim().toLocaleLowerCase();
+        return Array.prototype.slice.call(select.options).filter(function (option) {
+          return option.textContent.toLocaleLowerCase().indexOf(query) !== -1;
+        });
+      }
+
+      function render() {
+        var selectedOption = select.options[select.selectedIndex];
+        var selectedLabel = selectedOption ? selectedOption.textContent : '';
+        wrapper.querySelector('.filter-dropdown-value').textContent = selectedLabel;
+        trigger.setAttribute('aria-label', labelText + ': ' + selectedLabel);
+        options.innerHTML = filteredOptions().map(function (option) {
+          var selected = option.value === select.value;
+          return '<button type="button" role="option" class="filter-dropdown-option' +
+            (selected ? ' is-selected' : '') + '" aria-selected="' + (selected ? 'true' : 'false') +
+            '" data-value="' + escapeHtml(option.value) + '"><span>' + escapeHtml(option.textContent) +
+            '</span><span class="filter-dropdown-check" aria-hidden="true">' + (selected ? '✓' : '') + '</span></button>';
+        }).join('') || '<p class="filter-dropdown-empty">No matching options.</p>';
+      }
+
+      function close(restoreFocus) {
+        clearTimeout(closeTimer);
+        if (menu.hidden) return;
+        menu.classList.remove('is-open');
+        wrapper.classList.remove('is-dropdown-open');
+        trigger.setAttribute('aria-expanded', 'false');
+        closeTimer = setTimeout(function () { menu.hidden = true; }, 150);
+        if (restoreFocus) trigger.focus();
+      }
+
+      function open(focusSearch) {
+        clearTimeout(closeTimer);
+        render();
+        menu.hidden = false;
+        wrapper.classList.add('is-dropdown-open');
+        trigger.setAttribute('aria-expanded', 'true');
+        requestAnimationFrame(function () { menu.classList.add('is-open'); });
+        if (focusSearch) search.focus();
+        else {
+          var selectedOption = options.querySelector('.filter-dropdown-option.is-selected') ||
+            options.querySelector('.filter-dropdown-option');
+          if (selectedOption) selectedOption.focus();
+        }
+      }
+
+      trigger.addEventListener('click', function () {
+        if (menu.hidden) open(true);
+        else close(false);
+      });
+      trigger.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          open(false);
+        } else if (event.key === 'Escape') {
+          close(false);
+        } else if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open(true);
+        }
+      });
+      search.addEventListener('input', render);
+      search.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close(true);
+        } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          var firstOption = options.querySelector('.filter-dropdown-option');
+          if (firstOption) firstOption.focus();
+        }
+      });
+      options.addEventListener('keydown', function (event) {
+        var optionButtons = Array.prototype.slice.call(options.querySelectorAll('.filter-dropdown-option'));
+        var currentIndex = optionButtons.indexOf(document.activeElement);
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close(true);
+        } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
+          event.preventDefault();
+          var nextIndex = event.key === 'Home' ? 0
+            : event.key === 'End' ? optionButtons.length - 1
+            : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + optionButtons.length) % optionButtons.length;
+          if (optionButtons[nextIndex]) optionButtons[nextIndex].focus();
+        }
+      });
+      options.addEventListener('click', function (event) {
+        var option = event.target.closest('.filter-dropdown-option');
+        if (!option) return;
+        select.value = option.dataset.value;
+        select.dispatchEvent(new Event('change', {bubbles:true}));
+        render();
+        close(true);
+      });
+      document.addEventListener('click', function (event) {
+        if (!wrapper.contains(event.target)) close(false);
+      });
+      wrapper.addEventListener('focusout', function (event) {
+        if (!event.relatedTarget || !wrapper.contains(event.relatedTarget)) close(false);
+      });
+      select.addEventListener('change', render);
+      render();
+
+      return {select:select, render:render};
+    }
+
+    var filterDropdowns = [batchSelect, courseSelect, yearSelect, sectionSelect].map(createFilterDropdown);
+
     async function fetchJson(url) {
       var response = await fetch(url, {credentials:'same-origin', headers:{Accept:'application/json'}});
       var result;
@@ -576,6 +709,8 @@
           return '<option value="'+escapeHtml(value)+'">'+escapeHtml(labelBuilder(option))+'</option>';
         }).join('');
       select.value = options.some(function (option) { return String(option[valueKey]) === oldValue; }) ? oldValue : '';
+      var dropdown = filterDropdowns.find(function (item) { return item.select === select; });
+      if (dropdown) dropdown.render();
     }
 
     function currentFilters() {
@@ -600,26 +735,22 @@
     }
 
     async function reloadDependentOptions() {
-      var yearOptions = [];
-      if (courseSelect.value) {
-        var yearUrl = '../php-connections/get-audience-options.php?kind=year_levels&course_id=' + encodeURIComponent(courseSelect.value);
-        if (batchSelect.value) yearUrl += '&batch=' + encodeURIComponent(batchSelect.value);
-        var yearResult = await fetchJson(yearUrl);
-        yearOptions = yearResult.options;
-      }
+      var yearUrl = '../php-connections/get-audience-options.php?kind=year_levels';
+      if (batchSelect.value) yearUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+      if (courseSelect.value) yearUrl += '&course_id=' + encodeURIComponent(courseSelect.value);
+      var yearResult = await fetchJson(yearUrl);
+      var yearOptions = yearResult.options;
       setOptions(yearSelect, 'All Year Levels', yearOptions, 'name', function (option) { return option.name; });
       await reloadSections();
     }
 
     async function reloadSections() {
-      var sectionOptions = [];
-      if (courseSelect.value && yearSelect.value) {
-        var sectionUrl = '../php-connections/get-audience-options.php?kind=sections&course_id=' + encodeURIComponent(courseSelect.value) +
-          '&year_level=' + encodeURIComponent(yearSelect.value);
-        if (batchSelect.value) sectionUrl += '&batch=' + encodeURIComponent(batchSelect.value);
-        var sectionResult = await fetchJson(sectionUrl);
-        sectionOptions = sectionResult.options;
-      }
+      var sectionUrl = '../php-connections/get-audience-options.php?kind=sections';
+      if (batchSelect.value) sectionUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+      if (courseSelect.value) sectionUrl += '&course_id=' + encodeURIComponent(courseSelect.value);
+      if (yearSelect.value) sectionUrl += '&year_level=' + encodeURIComponent(yearSelect.value);
+      var sectionResult = await fetchJson(sectionUrl);
+      var sectionOptions = sectionResult.options;
       setOptions(sectionSelect, 'All Sections', sectionOptions, 'id', function (option) { return option.name; });
     }
 
@@ -648,27 +779,29 @@
       results.innerHTML = allStudents.map(function (student) {
         var id = String(student.id);
         var selected = selectedStudents.some(function (item) { return String(item.id) === id; });
-        var eligible = student.eligible_for_announcement && student.has_valid_email;
+        var eligible = student.eligible_for_announcement;
         var status = !student.eligible_for_announcement
           ? 'Ineligible sample or inactive record'
-          : (!student.has_valid_email ? 'No valid email address' : 'Eligible · valid email');
+          : (!student.has_valid_email ? 'No Valid Email — selectable, cannot receive Gmail' : 'Valid Email — eligible for Gmail delivery');
         var initials = String(student.student_name).split(/\s+/).map(function (part) { return part.charAt(0); }).slice(0,2).join('');
         return '<label class="student-row'+(selected?' is-selected':'')+(eligible?'':' is-disabled')+'">'+
           '<input type="checkbox" class="student-checkbox" value="'+escapeHtml(id)+'"'+(selected?' checked':'')+(eligible?'':' disabled')+'>'+
           '<span class="student-avatar" aria-hidden="true">'+escapeHtml(initials)+'</span>'+
           '<span class="student-info"><strong>'+escapeHtml(student.student_name)+'</strong>'+
           '<small>ID '+escapeHtml(id)+' · Batch '+escapeHtml(student.enrollment_year)+' · '+escapeHtml(student.course_code || 'No course')+' · '+escapeHtml(student.year_level)+' · '+escapeHtml(student.section_name || 'No section')+'</small>'+
-          '<span class="recipient-email-status'+(eligible?'':' none')+'">'+escapeHtml(status)+'</span></span>'+
+          '<span class="recipient-email-status'+(eligible && student.has_valid_email?'':' none')+'">'+escapeHtml(status)+'</span></span>'+
           '<span class="student-check" aria-hidden="true">✓</span></label>';
       }).join('');
     }
 
-    function uniqueEmailCount() {
-      var emails = {};
-      selectedStudents.forEach(function (student) {
-        if (student.email) emails[String(student.email).trim().toLowerCase()] = true;
-      });
-      return Object.keys(emails).length;
+    function validEmailCount() {
+      return selectedStudents.filter(function (student) {
+        return student.has_valid_email;
+      }).length;
+    }
+
+    function noEmailCount() {
+      return selectedStudents.length - validEmailCount();
     }
 
     function renderSelected() {
@@ -681,20 +814,24 @@
       } else {
         list.innerHTML = selectedStudents.map(function (student) {
           return '<div class="selected-recipient"><span><strong>'+escapeHtml(student.student_name)+'</strong>'+
-            '<small>ID '+escapeHtml(student.id)+' · Batch '+escapeHtml(student.enrollment_year)+' · '+escapeHtml(student.course_code || 'No course')+' · '+escapeHtml(student.year_level)+' · '+escapeHtml(student.section_name || 'No section')+'</small></span>'+
+            '<small>ID '+escapeHtml(student.id)+' · Batch '+escapeHtml(student.enrollment_year)+' · '+escapeHtml(student.course_code || 'No course')+' · '+escapeHtml(student.year_level)+' · '+escapeHtml(student.section_name || 'No section')+'</small>'+
+            '<small class="recipient-email-status'+(student.has_valid_email?'':' none')+'">'+escapeHtml(student.has_valid_email?'Valid Email':'No Valid Email')+'</small></span>'+
             '<button type="button" class="text-button" data-remove-selected="'+escapeHtml(student.id)+'" aria-label="Remove '+escapeHtml(student.student_name)+'">Remove</button></div>';
         }).join('');
       }
       $('#audienceBuilderFeedback').textContent = selectedStudents.length
-        ? selectedStudents.length + ' students selected · ' + uniqueEmailCount() + ' unique email recipient(s)'
+        ? selectedStudents.length + ' students selected · ' + validEmailCount() + ' with valid email · ' +
+          noEmailCount() + ' without valid email'
         : '';
+      $('#recipientSelectionSummary').textContent = selectedStudents.length + ' selected students · ' +
+        validEmailCount() + ' with valid email · ' + noEmailCount() + ' without valid email.';
       renderStudentRows();
     }
 
     function addStudents(students) {
       var added = 0;
       students.forEach(function (student) {
-        if (!student.eligible_for_announcement || !student.has_valid_email) return;
+        if (!student.eligible_for_announcement) return;
         if (selectedStudents.some(function (item) { return String(item.id) === String(student.id); })) return;
         selectedStudents.push(student);
         added++;
@@ -719,9 +856,10 @@
       suggestions.hidden = true;
       universalSearch.setAttribute('aria-expanded', 'false');
       if (audienceConfirmed) {
-        var uniqueCount = uniqueEmailCount();
+        var validCount = validEmailCount();
+        var noEmailCountValue = noEmailCount();
         $('#audienceCompact').innerHTML = '<span><strong>' + selectedStudents.length + ' students selected</strong><small>' +
-          uniqueCount + ' unique email recipient(s) · Eligibility rechecked when publishing</small></span>' +
+          validCount + ' with valid email · ' + noEmailCountValue + ' without valid email · Eligibility rechecked when publishing</small></span>' +
           '<button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
         $('#audienceCompact').hidden = false;
         $('#editAudience').addEventListener('click', function () {
@@ -798,10 +936,10 @@
         var allResult = await fetchJson('../php-connections/get-students.php');
         allStudents = allResult.students;
         selectedStudents = allResult.students.filter(function (student) {
-          return ids.indexOf(String(student.id)) !== -1 && student.eligible_for_announcement && student.has_valid_email;
+          return ids.indexOf(String(student.id)) !== -1 && student.eligible_for_announcement;
         });
         if (selectedStudents.length !== ids.length) {
-          restoredRecipientWarning = 'Some saved recipients were removed because their records are missing, ineligible, or no longer have a valid email address.';
+          restoredRecipientWarning = 'Some saved recipients were removed because their records are missing or ineligible.';
         }
         audienceConfirmed = selectedStudents.length > 0;
         audienceValue.value = JSON.stringify({mode:'selective', student_ids:selectedStudents.map(function (student) { return Number(student.id); })});
@@ -826,24 +964,18 @@
 
     batchSelect.addEventListener('change', async function () {
       invalidateAudience();
-      courseSelect.value = '';
-      yearSelect.value = '';
-      sectionSelect.value = '';
       try {
         var courseUrl = '../php-connections/get-audience-options.php?kind=courses';
         if (batchSelect.value) courseUrl += '&batch=' + encodeURIComponent(batchSelect.value);
         var courseResult = await fetchJson(courseUrl);
         setOptions(courseSelect, 'All Courses', courseResult.options, 'id', function (option) { return option.code + ' — ' + option.name; });
-        setOptions(yearSelect, 'All Year Levels', [], 'name', function (option) { return option.name; });
-        setOptions(sectionSelect, 'All Sections', [], 'id', function (option) { return option.name; });
+        await reloadDependentOptions();
         await loadStudents();
       } catch (error) { $('#studentResults').innerHTML = '<p class="student-empty" role="alert">'+escapeHtml(error.message)+'</p>'; }
     });
 
     courseSelect.addEventListener('change', async function () {
       invalidateAudience();
-      yearSelect.value = '';
-      sectionSelect.value = '';
       try {
         await reloadDependentOptions();
         await loadStudents();
@@ -852,7 +984,6 @@
 
     yearSelect.addEventListener('change', async function () {
       invalidateAudience();
-      sectionSelect.value = '';
       try {
         await reloadSections();
         await loadStudents();
@@ -1019,7 +1150,8 @@
         await refreshAnnouncements();
         if (isPublish) {
           announcementStatus.textContent = 'Announcement published. Emails sent: ' + result.sent_count +
-            '; failed: ' + result.failed_count + '; excluded: ' + result.excluded_count + '.';
+            '; failed: ' + result.failed_count + '; skipped: ' + result.excluded_count + '.';
+          if (result.message) announcementStatus.textContent += ' ' + result.message;
           var dashboardStatus = $('#dashboardStatus');
           dashboardStatus.textContent = announcementStatus.textContent;
           dashboardStatus.hidden = false;
@@ -1045,6 +1177,6 @@
 
 })();
 </script>
-<script src="osa-request-dashboard.js" defer></script>
+<script src="../js-folder/osa-request-dashboard.js" defer></script>
 </body>
 </html>
