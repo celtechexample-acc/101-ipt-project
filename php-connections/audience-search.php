@@ -118,15 +118,17 @@ $studentStmt->execute([':like' => $like]);
 foreach ($studentStmt->fetchAll() as $row) {
     $eligible = announcement_student_is_eligible($row);
     $email = trim(is_string($row['email'] ?? null) ? $row['email'] : '');
-    $eligible = $eligible && $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+    $emailReason = $email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+        ? ' · No valid email'
+        : ' · Valid email';
     $suggestions[] = [
         'category' => 'Student',
         'id' => (int) $row['id'],
         'label' => (string) $row['student_name'],
         'detail' => 'ID ' . $row['id'] . ' · Batch ' . $row['enrollment_year'] .
-            ' · ' . ($row['course_code'] ?: 'No course') . ' · ' . ($row['section_name'] ?: 'No section'),
+            ' · ' . ($row['course_code'] ?: 'No course') . ' · ' . ($row['section_name'] ?: 'No section') . $emailReason,
         'eligible' => $eligible,
-        'reason' => $eligible ? '' : 'Ineligible or no valid email',
+        'reason' => $eligible ? '' : 'Ineligible sample or inactive record',
     ];
 }
 

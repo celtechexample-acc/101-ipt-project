@@ -77,7 +77,7 @@ $students = array_map(static function (array $student): array {
 if ($eligibleOnly) {
     $students = array_values(array_filter(
         $students,
-        static fn(array $student): bool => $student['eligible_for_announcement'] && $student['has_valid_email']
+        static fn(array $student): bool => $student['eligible_for_announcement']
     ));
 }
 

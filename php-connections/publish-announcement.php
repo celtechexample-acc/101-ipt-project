@@ -138,13 +138,6 @@ if ($audience['mode'] === 'all_active') {
 
 $summary = announcement_recipient_summary($students);
 $recipients = $summary['recipients'];
-if ($recipients === []) {
-    announcement_publish_response([
-        'ok' => false,
-        'message' => 'There are no eligible students with valid email addresses in this selection.',
-        'excluded_count' => $summary['excluded_count'],
-    ], 422);
-}
 
 try {
     begin_sqlite_immediate($db);
@@ -331,6 +324,9 @@ $response = [
 if ($failedCount > 0) {
     $response['message'] = 'Announcement delivery was incomplete. Review delivery results in announcement history.';
     announcement_publish_response($response, 502);
+}
+if ($sentCount === 0 && $summary['excluded_count'] > 0) {
+    $response['message'] = $summary['excluded_count'] . ' selected student(s) were skipped because they have no valid email address or a duplicate email address.';
 }
 
 announcement_publish_response($response);
