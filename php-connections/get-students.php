@@ -69,6 +69,7 @@ $students = array_map(static function (array $student): array {
         'year_level' => $student['year_level'],
         'course_code' => $student['course_code'],
         'section_name' => $student['section_name'],
+        'email' => $email,
         'has_valid_email' => $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false,
         'eligible_for_announcement' => announcement_student_is_eligible($student),
     ];

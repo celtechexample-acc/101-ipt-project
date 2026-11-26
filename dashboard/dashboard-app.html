@@ -140,20 +140,42 @@
         <div class="audience-compact" id="audienceCompact" hidden aria-live="polite"></div>
         <p class="hint" id="announcementStatus" role="status" aria-live="polite" hidden></p>
         <div class="audience-wizard" id="audienceWizard" hidden>
-          <div class="wizard-progress">
-            <span id="wizardProgressLabel">Step 1 of 6</span>
-              <div class="wizard-progress-track" role="progressbar" aria-label="Audience selection progress" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1">
-              <span id="wizardProgressBar"></span>
-            </div>
+          <div class="audience-builder-heading">
+            <div><h3>Build Student Audience</h3><p>Search, filter, and review eligible recipients in one view.</p></div>
+            <button class="btn ghost sm" type="button" id="closeAudienceBuilder">Close</button>
           </div>
-          <div class="wizard-heading">
-            <h3 id="wizardTitle"></h3>
-            <p id="wizardInstruction"></p>
+          <div class="universal-search-wrap">
+            <label for="audienceUniversalSearch">Universal search</label>
+            <input type="search" id="audienceUniversalSearch" placeholder="Search batch, course, year level, section, or student name / ID..." autocomplete="off" aria-controls="audienceSuggestions" aria-expanded="false">
+            <div class="audience-suggestions" id="audienceSuggestions" role="listbox" hidden></div>
           </div>
-          <div class="wizard-screen" id="wizardScreen" aria-live="polite"></div>
-          <div class="wizard-actions">
-            <button class="btn ghost sm" type="button" id="wizardBack">Back</button>
-            <button class="btn green sm" type="button" id="wizardContinue" disabled>Continue</button>
+          <div class="audience-filter-grid">
+            <label class="filter-field">Select Batch<select id="batchSelect"><option value="">All Batches</option></select></label>
+            <label class="filter-field">Select Course<select id="courseSelect"><option value="">All Courses</option></select></label>
+            <label class="filter-field">Select Grade / Year Level<select id="yearLevelSelect"><option value="">All Year Levels</option></select></label>
+            <label class="filter-field">Select Section<select id="sectionSelect"><option value="">All Sections</option></select></label>
+          </div>
+          <div class="audience-builder-layout">
+            <section class="student-panel" aria-labelledby="matchingStudentsTitle">
+              <div class="student-toolbar">
+                <div class="student-toolbar-heading"><h4 id="matchingStudentsTitle">Matching Students</h4><span class="student-result-count" id="studentResultCount">0 records</span></div>
+                <label class="search-students">
+                  <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+                  <input type="search" id="studentSearch" placeholder="Search matching student name or ID" aria-label="Search matching students">
+                </label>
+                <button type="button" class="btn green" id="addAllMatching">Add All Matching Students</button>
+              </div>
+              <div class="student-results" id="studentResults" role="group" aria-label="Matching students"></div>
+            </section>
+            <aside class="selected-recipients-panel" aria-labelledby="selectedRecipientsTitle">
+              <div class="selected-recipients-heading"><h4 id="selectedRecipientsTitle">Selected Recipients</h4><strong id="selectedRecipientCount">0</strong></div>
+              <div class="selected-recipient-list" id="selectedRecipientList"></div>
+              <button type="button" class="text-button" id="clearAllRecipients" disabled>Clear All</button>
+            </aside>
+          </div>
+          <div class="audience-builder-actions">
+            <p id="audienceBuilderFeedback" role="status" aria-live="polite"></p>
+            <button type="button" class="btn green" id="confirmAudience" disabled>Confirm Selected Recipients</button>
           </div>
         </div>
         <input type="hidden" name="audience" id="audienceValue">
@@ -509,517 +531,453 @@
 
   refreshAnnouncements();
 
-  /* SQLite-backed Target Audience selection wizard. */
+  /* SQLite-backed Student Audience Builder. */
   (function () {
-    var wizard = $('#audienceWizard'), wizardScreen = $('#wizardScreen'), wizardTitle = $('#wizardTitle');
-    var wizardInstruction = $('#wizardInstruction'), wizardContinue = $('#wizardContinue'), wizardBack = $('#wizardBack');
-    var wizardProgressLabel = $('#wizardProgressLabel'), wizardProgress = $('.wizard-progress-track', wizard);
-    var wizardProgressBar = $('#wizardProgressBar'), audienceCompact = $('#audienceCompact');
-    var openAudience = $('#openAudience'), audienceValue = $('#audienceValue');
-
-    var stepNames = ['Select Batch', 'Select Course', 'Select Grade / Year Level', 'Select Section', 'Select Student', 'Review Recipients'];
-    var state = {
-      batch: '',
-      yearLevelName: '',
-      courseId: '', courseCode: '', courseName: '',
-      sectionId: '', sectionName: '',
-      selectedStudentIds: [],
-    };
+    var wizard = $('#audienceWizard');
+    var openAudience = $('#openAudience');
+    var audienceValue = $('#audienceValue');
+    var batchSelect = $('#batchSelect');
+    var courseSelect = $('#courseSelect');
+    var yearSelect = $('#yearLevelSelect');
+    var sectionSelect = $('#sectionSelect');
+    var studentSearch = $('#studentSearch');
+    var universalSearch = $('#audienceUniversalSearch');
+    var suggestions = $('#audienceSuggestions');
     var selectedStudents = [];
     var allStudents = [];
-    var allBatches = [];
-    var batchesLoaded = false;
-    var studentSearchQuery = '';
-    var studentSearchTimer = null;
-    var studentRequestNumber = 0;
-    var currentStep = 0;
     var audienceConfirmed = false;
     var restoredRecipientWarning = '';
+    var searchTimer = null;
+    var suggestionRequest = 0;
+    var studentRequest = 0;
+    var suggestionIndex = -1;
+    var suggestionItems = [];
 
     function escapeHtml(value) {
       return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
-        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char];
+        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&#39;'}[char];
       });
     }
 
-    var activeRequests = 0;
     async function fetchJson(url) {
-      activeRequests++;
-      document.body.classList.add('is-fetching');
-      var controller = new AbortController();
-      var timeout = setTimeout(function () { controller.abort(); }, 30000);
-      try {
-        var response = await fetch(url, {
-          credentials:'same-origin',
-          headers:{'Accept':'application/json'},
-          signal:controller.signal
-        });
-        var result;
-        try { result = await response.json(); }
-        catch (_) { throw new Error('The server returned an invalid response. Please try again.'); }
-        if (!response.ok || !result.ok) throw new Error(result.message || 'The database request failed.');
-        return result;
-      } catch (error) {
-        if (error.name === 'AbortError') throw new Error('The request timed out. Please try again.');
-        if (error instanceof TypeError) throw new Error('The request failed. Check your connection and try again.');
-        throw error;
-      } finally {
-        clearTimeout(timeout);
-        activeRequests--;
-        if (activeRequests === 0) document.body.classList.remove('is-fetching');
+      var response = await fetch(url, {credentials:'same-origin', headers:{Accept:'application/json'}});
+      var result;
+      try { result = await response.json(); }
+      catch (_) { throw new Error('The server returned an invalid response.'); }
+      if (!response.ok || !result.ok) throw new Error(result.message || 'The request could not be completed.');
+      return result;
+    }
+
+    function setOptions(select, allLabel, options, valueKey, labelBuilder) {
+      var oldValue = select.value;
+      select.innerHTML = '<option value="">'+escapeHtml(allLabel)+'</option>' +
+        options.map(function (option) {
+          var value = String(option[valueKey]);
+          return '<option value="'+escapeHtml(value)+'">'+escapeHtml(labelBuilder(option))+'</option>';
+        }).join('');
+      select.value = options.some(function (option) { return String(option[valueKey]) === oldValue; }) ? oldValue : '';
+    }
+
+    function currentFilters() {
+      var filters = {};
+      if (batchSelect.value) filters.batch = batchSelect.value;
+      if (courseSelect.value) filters.course_id = courseSelect.value;
+      if (yearSelect.value) filters.year_level = yearSelect.value;
+      if (sectionSelect.value) filters.section_id = sectionSelect.value;
+      if (studentSearch.value.trim()) filters.search = studentSearch.value.trim();
+      return filters;
+    }
+
+    async function loadFilterOptions() {
+      var batchResult = await fetchJson('../php-connections/get-student-batches.php');
+      setOptions(batchSelect, 'All Batches', batchResult.batches.map(function (year) { return {year:year}; }), 'year', function (option) { return option.year; });
+
+      var courseUrl = '../php-connections/get-audience-options.php?kind=courses';
+      if (batchSelect.value) courseUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+      var courseResult = await fetchJson(courseUrl);
+      setOptions(courseSelect, 'All Courses', courseResult.options, 'id', function (option) { return option.code + ' — ' + option.name; });
+      await reloadDependentOptions();
+    }
+
+    async function reloadDependentOptions() {
+      var yearOptions = [];
+      if (courseSelect.value) {
+        var yearUrl = '../php-connections/get-audience-options.php?kind=year_levels&course_id=' + encodeURIComponent(courseSelect.value);
+        if (batchSelect.value) yearUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+        var yearResult = await fetchJson(yearUrl);
+        yearOptions = yearResult.options;
       }
+      setOptions(yearSelect, 'All Year Levels', yearOptions, 'name', function (option) { return option.name; });
+      await reloadSections();
     }
 
-    function updateProgress() {
-      var number = currentStep + 1;
-      wizardProgressLabel.textContent = 'Step ' + number + ' of 6';
-      wizardProgress.setAttribute('aria-valuemax', '6');
-      wizardProgress.setAttribute('aria-valuenow', String(number));
-      wizardProgressBar.style.width = ((number / 6) * 100) + '%';
-      wizardTitle.textContent = stepNames[currentStep];
-    }
-
-    async function loadBatches() {
-      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading enrollment years...</p>';
-      wizardBack.disabled = true;
-      wizardContinue.disabled = true;
-      try {
-        var result = await fetchJson('../php-connections/get-student-batches.php');
-        allBatches = result.batches.map(String);
-        batchesLoaded = true;
-        return true;
-      } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-        return false;
-      } finally {
-        wizardBack.disabled = false;
+    async function reloadSections() {
+      var sectionOptions = [];
+      if (courseSelect.value && yearSelect.value) {
+        var sectionUrl = '../php-connections/get-audience-options.php?kind=sections&course_id=' + encodeURIComponent(courseSelect.value) +
+          '&year_level=' + encodeURIComponent(yearSelect.value);
+        if (batchSelect.value) sectionUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+        var sectionResult = await fetchJson(sectionUrl);
+        sectionOptions = sectionResult.options;
       }
+      setOptions(sectionSelect, 'All Sections', sectionOptions, 'id', function (option) { return option.name; });
     }
 
-    function renderBatchStep() {
-      wizardInstruction.textContent = 'Choose a batch from the student records, or choose All Batches to search across every batch.';
-      wizardScreen.innerHTML = '<label class="filter-field">Batch<select id="batchSelect"><option value="">Select Batch</option><option value="all"' +
-        (state.batch === 'all' ? ' selected' : '') + '>All Batches</option>' +
-        allBatches.map(function (year) {
-          return '<option value="' + escapeHtml(year) + '"' + (state.batch === String(year) ? ' selected' : '') + '>' + escapeHtml(year) + '</option>';
-        }).join('') + '</select></label>' +
-        '<button type="button" class="btn ghost sm select-all-scope"' + (!state.batch ? ' disabled' : '') + '>' +
-        (state.batch === 'all' ? 'Select All Students' : 'Select All Students in This Batch') + '</button>';
-      wizardContinue.disabled = !state.batch;
-      wizardBack.disabled = false;
-      updateProgress();
-    }
-
-    async function renderCourseStep() {
-      wizardInstruction.textContent = 'Choose a course in the selected batch scope.';
-      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading courses...</p>';
-      updateProgress();
-      wizardBack.disabled = true;
-      wizardContinue.disabled = true;
+    async function loadStudents() {
+      var results = $('#studentResults');
+      var requestNumber = ++studentRequest;
+      results.innerHTML = '<p class="student-empty loading-message">Loading matching students...</p>';
       try {
-        var params = new URLSearchParams({kind:'courses'});
-        if (state.batch && state.batch !== 'all') params.set('batch', state.batch);
-        var result = await fetchJson('../php-connections/get-audience-options.php?' + params.toString());
-        wizardScreen.innerHTML = '<label class="filter-field">Course<select id="courseSelect"><option value="">Select Course</option>' +
-          result.options.map(function (option) {
-            return '<option value="' + escapeHtml(option.id) + '"' + (String(state.courseId) === String(option.id) ? ' selected' : '') + '>' +
-              escapeHtml(option.code) + ' — ' + escapeHtml(option.name) + '</option>';
-          }).join('') + '</select></label>' +
-          '<button type="button" class="btn ghost sm select-all-scope"' + (!state.courseId ? ' disabled' : '') + '>Select All Students in This Course</button>';
-        if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No courses are available for this batch.</p>';
-        wizardContinue.disabled = !state.courseId;
-      } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-      } finally {
-        wizardBack.disabled = false;
-      }
-    }
-
-    async function renderYearLevelStep() {
-      wizardInstruction.textContent = 'Choose a grade or year level matching the selected batch and course.';
-      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading year levels...</p>';
-      updateProgress();
-      wizardBack.disabled = true;
-      wizardContinue.disabled = true;
-      try {
-        var params = new URLSearchParams({kind:'year_levels', course_id:state.courseId});
-        if (state.batch && state.batch !== 'all') params.set('batch', state.batch);
-        var result = await fetchJson('../php-connections/get-audience-options.php?' + params.toString());
-        wizardScreen.innerHTML = '<label class="filter-field">Grade / Year Level<select id="yearLevelSelect"><option value="">Select Grade / Year Level</option>' +
-          result.options.map(function (option) {
-            return '<option value="' + escapeHtml(option.name) + '"' + (state.yearLevelName === option.name ? ' selected' : '') + '>' + escapeHtml(option.name) + '</option>';
-          }).join('') + '</select></label>' +
-          '<button type="button" class="btn ghost sm select-all-scope"' + (!state.yearLevelName ? ' disabled' : '') + '>Select All Students in This Year Level</button>';
-        if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No year levels are available for this course and batch.</p>';
-        wizardContinue.disabled = !state.yearLevelName;
-      } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-      } finally {
-        wizardBack.disabled = false;
-      }
-    }
-
-    async function renderSectionStep() {
-      wizardInstruction.textContent = 'Choose a section matching the selected filters.';
-      wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading sections...</p>';
-      updateProgress();
-      wizardBack.disabled = true;
-      wizardContinue.disabled = true;
-      try {
-        var params = new URLSearchParams({kind:'sections', course_id:state.courseId, year_level:state.yearLevelName});
-        if (state.batch && state.batch !== 'all') params.set('batch', state.batch);
-        var result = await fetchJson('../php-connections/get-audience-options.php?' + params.toString());
-        wizardScreen.innerHTML = '<label class="filter-field">Section<select id="sectionSelect"><option value="">Select Section</option>' +
-          result.options.map(function (option) {
-            return '<option value="' + escapeHtml(option.id) + '"' + (String(state.sectionId) === String(option.id) ? ' selected' : '') + '>' +
-              escapeHtml(option.name) + '</option>';
-          }).join('') + '</select></label>' +
-          '<button type="button" class="btn ghost sm select-all-scope"' + (!state.sectionId ? ' disabled' : '') + '>Select All Students in This Section</button>';
-        if (!result.options.length) wizardScreen.innerHTML = '<p class="student-empty">No sections are available for this selection.</p>';
-        wizardContinue.disabled = !state.sectionId;
-      } catch (error) {
-        wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-      } finally {
-        wizardBack.disabled = false;
-      }
-    }
-
-    async function renderStudentStep() {
-      wizardInstruction.textContent = 'Search matching student names or IDs, then select individuals or add every eligible match.';
-      wizardScreen.innerHTML = '<div class="student-panel"><div class="student-toolbar"><label class="search-students"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg><input type="search" id="studentSearch" placeholder="Search student name or ID" aria-label="Search students by name or ID" value="' + escapeHtml(studentSearchQuery) + '"></label><div class="student-tools"><span class="student-selected-count"></span><button type="button" class="text-button select-all-visible">Select All Matching Students</button><button type="button" class="text-button deselect-all-visible">Deselect Matching Students</button></div></div><div class="student-results" role="group" aria-label="Matching students"></div></div>';
-      updateProgress();
-      await loadMatchingStudents();
-      $('#studentSearch', wizardScreen).addEventListener('input', function (event) {
-        studentSearchQuery = event.target.value;
-        clearTimeout(studentSearchTimer);
-        studentSearchTimer = setTimeout(loadMatchingStudents, 180);
-      });
-      updateStudentContinue();
-    }
-
-    function currentStudentFilters(maxStep) {
-      maxStep = maxStep == null ? currentStep : maxStep;
-      var params = {};
-      if (maxStep >= 0 && state.batch && state.batch !== 'all') params.batch = state.batch;
-      if (maxStep >= 1 && state.courseId) params.course_id = state.courseId;
-      if (maxStep >= 2 && state.yearLevelName) params.year_level = state.yearLevelName;
-      if (maxStep >= 3 && state.sectionId) params.section_id = state.sectionId;
-      return params;
-    }
-
-    async function fetchStudents(filters, eligibleOnly) {
-      var params = new URLSearchParams(filters || {});
-      if (eligibleOnly) params.set('eligible_only', '1');
-      return fetchJson('../php-connections/get-students.php?' + params.toString());
-    }
-
-    async function loadMatchingStudents() {
-      var results = $('.student-results', wizardScreen);
-      if (!results) return;
-      results.innerHTML = '<p class="student-empty loading-message">Loading students...</p>';
-      wizardBack.disabled = true;
-      var requestNumber = ++studentRequestNumber;
-      try {
-        var filters = currentStudentFilters();
-        if (studentSearchQuery.trim()) filters.search = studentSearchQuery.trim();
-        var result = await fetchStudents(filters, false);
-        if (requestNumber !== studentRequestNumber) return;
+        var params = new URLSearchParams(currentFilters());
+        var result = await fetchJson('../php-connections/get-students.php?' + params.toString());
+        if (requestNumber !== studentRequest) return;
         allStudents = result.students;
         renderStudentRows();
       } catch (error) {
-        if (requestNumber !== studentRequestNumber) return;
-        results.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-      } finally {
-        if (requestNumber === studentRequestNumber) {
-          wizardBack.disabled = false;
-          updateStudentContinue();
-        }
+        if (requestNumber === studentRequest) results.innerHTML = '<p class="student-empty" role="alert">'+escapeHtml(error.message)+'</p>';
       }
     }
 
     function renderStudentRows() {
-      var results = $('.student-results', wizardScreen);
-      var count = $('.student-selected-count', wizardScreen);
-      if (!results) return;
-      count.textContent = state.selectedStudentIds.length + ' students selected';
+      var results = $('#studentResults');
+      $('#studentResultCount').textContent = allStudents.length + (allStudents.length === 1 ? ' record' : ' records');
       if (!allStudents.length) {
-        results.innerHTML = '<p class="student-empty">No students match these filters.</p>';
-        updateStudentContinue();
+        results.innerHTML = '<p class="student-empty">No students match the selected filters.</p>';
         return;
       }
       results.innerHTML = allStudents.map(function (student) {
         var id = String(student.id);
-        var selected = state.selectedStudentIds.indexOf(id) !== -1;
+        var selected = selectedStudents.some(function (item) { return String(item.id) === id; });
+        var eligible = student.eligible_for_announcement && student.has_valid_email;
+        var status = !student.eligible_for_announcement
+          ? 'Ineligible sample or inactive record'
+          : (!student.has_valid_email ? 'No valid email address' : 'Eligible · valid email');
         var initials = String(student.student_name).split(/\s+/).map(function (part) { return part.charAt(0); }).slice(0,2).join('');
-        var eligible = student.eligible_for_announcement;
-        var emailStatus = !eligible ? 'Sample or inactive record; cannot receive announcements'
-          : (!student.has_valid_email ? 'No valid email; excluded when publishing' : 'Valid email available');
-        return '<label class="student-row' + (selected ? ' is-selected' : '') + '">' +
-          '<input type="checkbox" class="student-checkbox" value="' + escapeHtml(id) + '"' + (selected ? ' checked' : '') + (!eligible || !student.has_valid_email ? ' disabled' : '') + '>' +
-          '<span class="student-avatar" aria-hidden="true">' + escapeHtml(initials) + '</span>' +
-          '<span class="student-info"><strong>' + escapeHtml(student.student_name) + '</strong><small>ID ' + escapeHtml(id) + ' · Batch ' + escapeHtml(student.enrollment_year) + ' · ' + escapeHtml(student.course_code || 'No course') + ' · ' + escapeHtml(student.section_name || 'No section') + '</small>' +
-          '<span class="recipient-email-status' + (student.has_valid_email ? '' : ' none') + '">' + escapeHtml(emailStatus) + '</span></span>' +
+        return '<label class="student-row'+(selected?' is-selected':'')+(eligible?'':' is-disabled')+'">'+
+          '<input type="checkbox" class="student-checkbox" value="'+escapeHtml(id)+'"'+(selected?' checked':'')+(eligible?'':' disabled')+'>'+
+          '<span class="student-avatar" aria-hidden="true">'+escapeHtml(initials)+'</span>'+
+          '<span class="student-info"><strong>'+escapeHtml(student.student_name)+'</strong>'+
+          '<small>ID '+escapeHtml(id)+' · Batch '+escapeHtml(student.enrollment_year)+' · '+escapeHtml(student.course_code || 'No course')+' · '+escapeHtml(student.year_level)+' · '+escapeHtml(student.section_name || 'No section')+'</small>'+
+          '<span class="recipient-email-status'+(eligible?'':' none')+'">'+escapeHtml(status)+'</span></span>'+
           '<span class="student-check" aria-hidden="true">✓</span></label>';
       }).join('');
-      updateStudentContinue();
     }
 
-    function updateStudentContinue() {
-      wizardContinue.disabled = state.selectedStudentIds.length === 0;
-    }
-
-    function renderReview() {
-      var chosen = selectedStudents.filter(function (student) {
-        return state.selectedStudentIds.indexOf(String(student.id)) !== -1;
+    function uniqueEmailCount() {
+      var emails = {};
+      selectedStudents.forEach(function (student) {
+        if (student.email) emails[String(student.email).trim().toLowerCase()] = true;
       });
-      wizardInstruction.textContent = 'Review the selected student names and total recipient count. Add more from another batch or group if needed.';
-      wizardScreen.innerHTML = '<div class="review-count-grid">' +
-        '<div class="review-count"><strong>' + state.selectedStudentIds.length + '</strong><span>Students selected</span></div></div>' +
-        '<div class="audience-summary"><div class="selected-recipient-list">' +
-        chosen.map(function (student) {
-          return '<div class="selected-recipient"><span><strong>' + escapeHtml(student.student_name) + '</strong><small>Student ID ' + escapeHtml(student.id) + '</small></span>' +
-            '<button type="button" class="text-button" data-remove-student="' + escapeHtml(student.id) + '" aria-label="Remove ' + escapeHtml(student.student_name) + '">Remove</button></div>';
-        }).join('') +
-        (chosen.length < state.selectedStudentIds.length ? '<p class="student-empty">Some saved student records could not be loaded. Reopen this draft and verify its recipients before publishing.</p>' : '') +
-        '</div><div class="review-recipient-actions"><button type="button" class="btn ghost sm" data-add-more>+ Add more recipients</button>' +
-        '<button type="button" class="text-button" data-clear-recipients>Clear all recipients</button></div>' +
-        (restoredRecipientWarning ? '<p class="demo-warning" role="status">' + escapeHtml(restoredRecipientWarning) + '</p>' : '') +
-        '<p class="demo-warning">No emails are sent during recipient selection. Recipient IDs and eligibility are checked again when publishing.</p></div>';
-      updateProgress();
-      wizardContinue.disabled = state.selectedStudentIds.length === 0;
+      return Object.keys(emails).length;
     }
 
-    function renderWizard(animate) {
-      wizardScreen.classList.remove('is-leaving');
-      if (currentStep === 0) {
-        if (!batchesLoaded) {
-          wizardScreen.innerHTML = '<p class="student-empty loading-message">Loading batches...</p>';
-          loadBatches().then(function (loaded) {
-            if (loaded && currentStep === 0 && !wizard.hidden) renderWizard(false);
-          });
-        } else renderBatchStep();
+    function renderSelected() {
+      var list = $('#selectedRecipientList');
+      $('#selectedRecipientCount').textContent = String(selectedStudents.length);
+      $('#clearAllRecipients').disabled = selectedStudents.length === 0;
+      $('#confirmAudience').disabled = selectedStudents.length === 0;
+      if (!selectedStudents.length) {
+        list.innerHTML = '<p class="student-empty">No recipients selected.</p>';
+      } else {
+        list.innerHTML = selectedStudents.map(function (student) {
+          return '<div class="selected-recipient"><span><strong>'+escapeHtml(student.student_name)+'</strong>'+
+            '<small>ID '+escapeHtml(student.id)+' · Batch '+escapeHtml(student.enrollment_year)+' · '+escapeHtml(student.course_code || 'No course')+' · '+escapeHtml(student.year_level)+' · '+escapeHtml(student.section_name || 'No section')+'</small></span>'+
+            '<button type="button" class="text-button" data-remove-selected="'+escapeHtml(student.id)+'" aria-label="Remove '+escapeHtml(student.student_name)+'">Remove</button></div>';
+        }).join('');
       }
-      if (currentStep === 1) renderCourseStep();
-      if (currentStep === 2) renderYearLevelStep();
-      if (currentStep === 3) renderSectionStep();
-      if (currentStep === 4) renderStudentStep();
-      if (currentStep === 5) renderReview();
-      wizardBack.textContent = currentStep === 0 ? 'Cancel' : 'Back';
-      wizardContinue.textContent = currentStep === 5 ? 'Confirm selection' : (currentStep === 4 ? 'Review recipients' : 'Continue');
-      if (animate) {
-        wizardScreen.classList.remove('is-entering');
-        void wizardScreen.offsetWidth;
-        wizardScreen.classList.add('is-entering');
-      }
+      $('#audienceBuilderFeedback').textContent = selectedStudents.length
+        ? selectedStudents.length + ' students selected · ' + uniqueEmailCount() + ' unique email recipient(s)'
+        : '';
+      renderStudentRows();
     }
 
-    function clearAfter(step) {
-      if (step <= 0) state.batch = '';
-      if (step <= 1) { state.courseId = ''; state.courseCode = ''; state.courseName = ''; }
-      if (step <= 2) state.yearLevelName = '';
-      if (step <= 3) { state.sectionId = ''; state.sectionName = ''; }
-      if (step <= 4) { studentSearchQuery = ''; allStudents = []; }
+    function addStudents(students) {
+      var added = 0;
+      students.forEach(function (student) {
+        if (!student.eligible_for_announcement || !student.has_valid_email) return;
+        if (selectedStudents.some(function (item) { return String(item.id) === String(student.id); })) return;
+        selectedStudents.push(student);
+        added++;
+      });
+      audienceConfirmed = false;
+      audienceValue.value = '';
+      $('#audienceCompact').hidden = true;
+      renderSelected();
+      return added;
     }
 
-    function closeWizard() {
+    function invalidateAudience() {
+      audienceConfirmed = false;
+      audienceValue.value = '';
+      $('#audienceCompact').hidden = true;
+    }
+
+    function closeBuilder() {
       wizard.hidden = true;
       openAudience.hidden = false;
       openAudience.textContent = audienceConfirmed ? 'Change audience' : 'Choose audience';
+      suggestions.hidden = true;
+      universalSearch.setAttribute('aria-expanded', 'false');
       if (audienceConfirmed) {
-        var audienceTitle = state.selectedStudentIds.length + ' students selected';
-        var audienceDetail = 'Names reviewed · recipient eligibility rechecked when publishing';
-        audienceCompact.innerHTML = '<span><strong>' + audienceTitle + '</strong><small>' + audienceDetail + '</small></span><button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
-        audienceCompact.hidden = false;
-        $('#editAudience', audienceCompact).addEventListener('click', function () {
-          currentStep = 0;
+        var uniqueCount = uniqueEmailCount();
+        $('#audienceCompact').innerHTML = '<span><strong>' + selectedStudents.length + ' students selected</strong><small>' +
+          uniqueCount + ' unique email recipient(s) · Eligibility rechecked when publishing</small></span>' +
+          '<button class="btn ghost sm" type="button" id="editAudience">Edit audience</button>';
+        $('#audienceCompact').hidden = false;
+        $('#editAudience').addEventListener('click', function () {
           wizard.hidden = false;
           openAudience.hidden = true;
-          audienceCompact.hidden = true;
-          renderWizard(true);
+          $('#audienceCompact').hidden = true;
+          loadStudents();
         });
+      }
+    }
+
+    function closeSuggestions() {
+      suggestions.hidden = true;
+      universalSearch.setAttribute('aria-expanded', 'false');
+      suggestionIndex = -1;
+    }
+
+    function renderSuggestions(items) {
+      suggestionItems = items;
+      suggestionIndex = -1;
+      if (!items.length) {
+        suggestions.innerHTML = '<div class="audience-suggestion-empty">No matching database records found.</div>';
       } else {
-        audienceCompact.hidden = true;
+        suggestions.innerHTML = items.map(function (item, index) {
+          var detail = item.detail ? '<small>' + escapeHtml(item.detail) + '</small>' : '';
+          var disabled = item.category === 'Student' && !item.eligible;
+          return '<button type="button" role="option" class="audience-suggestion'+(disabled?' is-disabled':'')+'" data-suggestion-index="'+index+'"'+(disabled?' disabled':'')+'>'+
+            '<span class="suggestion-badge">'+escapeHtml(item.category)+'</span><span class="suggestion-text"><strong>'+escapeHtml(item.label)+'</strong>'+detail+'</span></button>';
+        }).join('');
+      }
+      suggestions.hidden = false;
+      universalSearch.setAttribute('aria-expanded', 'true');
+    }
+
+    async function searchSuggestions(query) {
+      var requestNumber = ++suggestionRequest;
+      suggestions.innerHTML = '<div class="audience-suggestion-loading">Searching database...</div>';
+      suggestions.hidden = false;
+      universalSearch.setAttribute('aria-expanded', 'true');
+      try {
+        var result = await fetchJson('../php-connections/audience-search.php?q=' + encodeURIComponent(query));
+        if (requestNumber === suggestionRequest) renderSuggestions(result.suggestions);
+      } catch (error) {
+        if (requestNumber === suggestionRequest) renderSuggestions([]);
       }
     }
 
     window.announcementAudience = {
       reset: function () {
-        clearAfter(0);
-        state.selectedStudentIds = [];
         selectedStudents = [];
         allStudents = [];
-        restoredRecipientWarning = '';
-        currentStep = 0;
-        studentSearchQuery = '';
-        clearTimeout(studentSearchTimer);
         audienceConfirmed = false;
+        restoredRecipientWarning = '';
+        batchSelect.value = '';
+        courseSelect.value = '';
+        yearSelect.value = '';
+        sectionSelect.value = '';
+        universalSearch.value = '';
+        studentSearch.value = '';
         audienceValue.value = '';
-        wizard.hidden = true;
-        openAudience.hidden = false;
-        openAudience.textContent = 'Choose audience';
-        audienceCompact.hidden = true;
+        $('#audienceCompact').hidden = true;
+        closeSuggestions();
+        renderSelected();
       },
       restore: async function (raw) {
         this.reset();
         if (!raw) return;
         var audience = JSON.parse(raw);
-        state.batch = audience.batch == null ? 'all' : String(audience.batch);
-        state.yearLevelName = audience.year_level || '';
-        state.courseId = audience.course_id == null ? '' : String(audience.course_id);
-        state.courseCode = audience.course_code || '';
-        state.courseName = audience.course_name || '';
-        state.sectionId = audience.section_id == null ? '' : String(audience.section_id);
-        state.sectionName = audience.section_name || '';
-        state.selectedStudentIds = Array.isArray(audience.student_ids) ? audience.student_ids.map(String) : [];
-        if (audience.mode === 'all_active' && state.selectedStudentIds.length === 0) {
-          var eligibleResult = await fetchStudents({}, true);
-          state.selectedStudentIds = eligibleResult.students.map(function (student) { return String(student.id); });
+        var ids = Array.isArray(audience.student_ids) ? audience.student_ids.map(String) : [];
+        if (!ids.length && audience.mode === 'all_active') {
+          var eligibleResult = await fetchJson('../php-connections/get-students.php?eligible_only=1');
+          ids = eligibleResult.students.map(function (student) { return String(student.id); });
         }
-        var result = await fetchStudents({}, false);
-        allStudents = result.students;
-        var requestedIds = state.selectedStudentIds;
-        selectedStudents = allStudents.filter(function (student) {
-          return requestedIds.indexOf(String(student.id)) !== -1
-            && student.eligible_for_announcement && student.has_valid_email;
+        var allResult = await fetchJson('../php-connections/get-students.php');
+        allStudents = allResult.students;
+        selectedStudents = allResult.students.filter(function (student) {
+          return ids.indexOf(String(student.id)) !== -1 && student.eligible_for_announcement && student.has_valid_email;
         });
-        state.selectedStudentIds = selectedStudents.map(function (student) { return String(student.id); });
-        if (state.selectedStudentIds.length !== requestedIds.length) {
+        if (selectedStudents.length !== ids.length) {
           restoredRecipientWarning = 'Some saved recipients were removed because their records are missing, ineligible, or no longer have a valid email address.';
         }
-        audienceValue.value = JSON.stringify({
-          mode: 'selective',
-          student_ids: state.selectedStudentIds.map(Number)
-        });
-        audienceConfirmed = true;
-        currentStep = 5;
-        wizard.hidden = true;
-        closeWizard();
+        audienceConfirmed = selectedStudents.length > 0;
+        audienceValue.value = JSON.stringify({mode:'selective', student_ids:selectedStudents.map(function (student) { return Number(student.id); })});
+        renderSelected();
+        if (restoredRecipientWarning) $('#audienceBuilderFeedback').textContent = restoredRecipientWarning;
+        closeBuilder();
       }
     };
 
-    openAudience.addEventListener('click', function () {
+    openAudience.addEventListener('click', async function () {
       wizard.hidden = false;
       openAudience.hidden = true;
-      renderWizard(true);
+      try {
+        await loadFilterOptions();
+        await loadStudents();
+      } catch (error) {
+        $('#studentResults').innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
+      }
     });
 
-    function addSelectedStudents(students) {
-      students.forEach(function (student) {
-        if (!student.eligible_for_announcement || !student.has_valid_email) return;
-        var id = String(student.id);
-        if (state.selectedStudentIds.indexOf(id) === -1) state.selectedStudentIds.push(id);
-        var existingIndex = selectedStudents.findIndex(function (selected) { return String(selected.id) === id; });
-        if (existingIndex === -1) selectedStudents.push(student);
-        else selectedStudents[existingIndex] = student;
-      });
-    }
+    $('#closeAudienceBuilder').addEventListener('click', closeBuilder);
 
-    function removeSelectedStudent(id) {
-      id = String(id);
-      state.selectedStudentIds = state.selectedStudentIds.filter(function (selectedId) { return selectedId !== id; });
-      selectedStudents = selectedStudents.filter(function (student) { return String(student.id) !== id; });
-    }
-
-    function invalidateAudience() {
-      audienceConfirmed = false;
-      restoredRecipientWarning = '';
-      audienceValue.value = '';
-      audienceCompact.hidden = true;
-    }
-
-    async function selectAllCurrentScope() {
-      var result = await fetchStudents(currentStudentFilters(), true);
-      addSelectedStudents(result.students);
-      currentStep = 5;
-      renderWizard(true);
-    }
-
-    wizardScreen.addEventListener('change', function (event) {
-      var select = event.target;
-      if (!select.matches('select')) return;
-      if (select.id === 'batchSelect') {
-        clearAfter(0);
-        state.batch = select.value;
-      } else if (select.id === 'courseSelect') {
-        clearAfter(1);
-        state.courseId = select.value;
-        if (select.selectedIndex > 0) {
-          var courseParts = select.options[select.selectedIndex].textContent.split(' — ');
-          state.courseCode = courseParts.shift() || '';
-          state.courseName = courseParts.join(' — ');
-        }
-      } else if (select.id === 'yearLevelSelect') {
-        clearAfter(2);
-        state.yearLevelName = select.value;
-      } else if (select.id === 'sectionSelect') {
-        clearAfter(3);
-        state.sectionId = select.value;
-        state.sectionName = select.selectedIndex > 0 ? select.options[select.selectedIndex].textContent : '';
-      } else {
-        return;
-      }
+    batchSelect.addEventListener('change', async function () {
       invalidateAudience();
-      renderWizard(false);
+      courseSelect.value = '';
+      yearSelect.value = '';
+      sectionSelect.value = '';
+      try {
+        var courseUrl = '../php-connections/get-audience-options.php?kind=courses';
+        if (batchSelect.value) courseUrl += '&batch=' + encodeURIComponent(batchSelect.value);
+        var courseResult = await fetchJson(courseUrl);
+        setOptions(courseSelect, 'All Courses', courseResult.options, 'id', function (option) { return option.code + ' — ' + option.name; });
+        setOptions(yearSelect, 'All Year Levels', [], 'name', function (option) { return option.name; });
+        setOptions(sectionSelect, 'All Sections', [], 'id', function (option) { return option.name; });
+        await loadStudents();
+      } catch (error) { $('#studentResults').innerHTML = '<p class="student-empty" role="alert">'+escapeHtml(error.message)+'</p>'; }
     });
 
-    wizardScreen.addEventListener('click', async function (event) {
+    courseSelect.addEventListener('change', async function () {
+      invalidateAudience();
+      yearSelect.value = '';
+      sectionSelect.value = '';
+      try {
+        await reloadDependentOptions();
+        await loadStudents();
+      } catch (error) { $('#studentResults').innerHTML = '<p class="student-empty" role="alert">'+escapeHtml(error.message)+'</p>'; }
+    });
+
+    yearSelect.addEventListener('change', async function () {
+      invalidateAudience();
+      sectionSelect.value = '';
+      try {
+        await reloadSections();
+        await loadStudents();
+      } catch (error) { $('#studentResults').innerHTML = '<p class="student-empty" role="alert">'+escapeHtml(error.message)+'</p>'; }
+    });
+
+    sectionSelect.addEventListener('change', function () {
+      invalidateAudience();
+      loadStudents();
+    });
+
+    var studentSearchTimer = null;
+    studentSearch.addEventListener('input', function () {
+      clearTimeout(studentSearchTimer);
+      studentSearchTimer = setTimeout(loadStudents, 180);
+    });
+
+    universalSearch.addEventListener('input', function () {
+      var query = universalSearch.value.trim();
+      clearTimeout(searchTimer);
+      if (query.length < 2) { closeSuggestions(); return; }
+      searchTimer = setTimeout(function () { searchSuggestions(query); }, 220);
+    });
+    universalSearch.addEventListener('keydown', function (event) {
+      var buttons = Array.prototype.slice.call(suggestions.querySelectorAll('.audience-suggestion:not(:disabled)'), 0);
+      if (event.key === 'Escape') { closeSuggestions(); return; }
+      if (!buttons.length) return;
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        suggestionIndex = event.key === 'ArrowDown'
+          ? (suggestionIndex + 1) % buttons.length
+          : (suggestionIndex - 1 + buttons.length) % buttons.length;
+        buttons.forEach(function (button, index) { button.classList.toggle('is-active', index === suggestionIndex); });
+        buttons[suggestionIndex].scrollIntoView({block:'nearest'});
+      } else if (event.key === 'Enter' && suggestionIndex >= 0) {
+        event.preventDefault();
+        buttons[suggestionIndex].click();
+      }
+    });
+
+    suggestions.addEventListener('click', async function (event) {
+      var button = event.target.closest('[data-suggestion-index]');
+      if (!button) return;
+      var item = suggestionItems[Number(button.dataset.suggestionIndex)];
+      if (!item) return;
+      if (item.category === 'Student') {
+        var result = await fetchJson('../php-connections/get-students.php?search=' + encodeURIComponent(item.label));
+        var student = result.students.find(function (record) { return String(record.id) === String(item.id); });
+        if (student) {
+          var added = addStudents([student]);
+          $('#audienceBuilderFeedback').textContent = added ? 'Student added to recipients.' : 'That student is already selected or is not eligible.';
+        }
+      } else if (item.category === 'Batch') {
+        batchSelect.value = String(item.id);
+        batchSelect.dispatchEvent(new Event('change'));
+      } else if (item.category === 'Course') {
+        courseSelect.value = String(item.id);
+        courseSelect.dispatchEvent(new Event('change'));
+      } else if (item.category === 'Year Level') {
+        yearSelect.value = item.label;
+        yearSelect.dispatchEvent(new Event('change'));
+      } else if (item.category === 'Section') {
+        sectionSelect.value = String(item.id);
+        sectionSelect.dispatchEvent(new Event('change'));
+      }
+      closeSuggestions();
+      universalSearch.value = '';
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.universal-search-wrap')) closeSuggestions();
+    });
+
+    $('#studentResults').addEventListener('change', function (event) {
       var checkbox = event.target.closest('.student-checkbox');
-      if (checkbox) {
-        var id = checkbox.value;
-        if (checkbox.checked) {
-          addSelectedStudents(allStudents.filter(function (student) { return String(student.id) === id; }));
-        } else {
-          removeSelectedStudent(id);
-        }
-        invalidateAudience();
-        renderStudentRows();
-        return;
+      if (!checkbox) return;
+      var student = allStudents.find(function (item) { return String(item.id) === checkbox.value; });
+      if (checkbox.checked && student) addStudents([student]);
+      else if (!checkbox.checked) selectedStudents = selectedStudents.filter(function (item) { return String(item.id) !== checkbox.value; });
+      invalidateAudience();
+      renderSelected();
+    });
+
+    $('#selectedRecipientList').addEventListener('click', function (event) {
+      var button = event.target.closest('[data-remove-selected]');
+      if (!button) return;
+      selectedStudents = selectedStudents.filter(function (student) { return String(student.id) !== button.dataset.removeSelected; });
+      invalidateAudience();
+      renderSelected();
+    });
+
+    $('#clearAllRecipients').addEventListener('click', function () {
+      selectedStudents = [];
+      invalidateAudience();
+      renderSelected();
+    });
+
+    $('#addAllMatching').addEventListener('click', async function () {
+      var button = $('#addAllMatching');
+      button.disabled = true;
+      try {
+        var params = new URLSearchParams(currentFilters());
+        params.delete('search');
+        if (studentSearch.value.trim()) params.set('search', studentSearch.value.trim());
+        params.set('eligible_only', '1');
+        var result = await fetchJson('../php-connections/get-students.php?' + params.toString());
+        var added = addStudents(result.students);
+        $('#audienceBuilderFeedback').textContent = added
+          ? added + ' eligible student(s) added · ' + selectedStudents.length + ' total selected'
+          : 'No new eligible students matched this scope.';
+      } catch (error) {
+        $('#audienceBuilderFeedback').textContent = error.message;
+      } finally {
+        button.disabled = false;
       }
-      var removeButton = event.target.closest('[data-remove-student]');
-      if (removeButton) {
-        removeSelectedStudent(removeButton.dataset.removeStudent);
-        invalidateAudience();
-        renderReview();
-        return;
-      }
-      if (event.target.closest('[data-clear-recipients]')) {
-        state.selectedStudentIds = [];
-        selectedStudents = [];
-        invalidateAudience();
-        renderReview();
-        return;
-      }
-      if (event.target.closest('[data-add-more]')) {
-        invalidateAudience();
-        currentStep = 0;
-        renderWizard(true);
-        return;
-      }
-      if (event.target.closest('.select-all-scope') || event.target.closest('.select-all-visible')) {
-        var button = event.target.closest('.select-all-scope, .select-all-visible');
-        button.disabled = true;
-        try {
-          if (currentStep === 4) {
-            var filters = currentStudentFilters();
-            if (studentSearchQuery.trim()) filters.search = studentSearchQuery.trim();
-            var matching = await fetchStudents(filters, true);
-            addSelectedStudents(matching.students);
-            currentStep = 5;
-            renderWizard(true);
-          } else {
-            await selectAllCurrentScope();
-          }
-          invalidateAudience();
-        } catch (error) {
-          wizardScreen.innerHTML = '<p class="student-empty" role="alert">' + escapeHtml(error.message) + '</p>';
-        }
-        return;
-      }
-      if (event.target.closest('.deselect-all-visible')) {
-        allStudents.forEach(function (student) { removeSelectedStudent(student.id); });
-        invalidateAudience();
-        renderStudentRows();
-      }
+    });
+
+    $('#confirmAudience').addEventListener('click', function () {
+      if (!selectedStudents.length) return;
+      audienceValue.value = JSON.stringify({
+        mode:'selective',
+        student_ids:selectedStudents.map(function (student) { return Number(student.id); })
+      });
+      audienceConfirmed = true;
+      closeBuilder();
     });
 
     $('#announcementForm').addEventListener('submit', async function (event) {
@@ -1081,41 +1039,6 @@
         delete this.dataset.busy;
         buttons.forEach(function (button) { button.disabled = false; });
       }
-    });
-
-    wizardBack.addEventListener('click', function () {
-      if (currentStep === 0) { closeWizard(); return; }
-      currentStep--;
-      renderWizard(true);
-    });
-
-    wizardContinue.addEventListener('click', function () {
-      if (wizardContinue.disabled) return;
-      if (currentStep === 0) {
-        if (!state.batch) return;
-        currentStep = 1;
-      } else if (currentStep === 1) {
-        if (!state.courseId) return;
-        currentStep = 2;
-      } else if (currentStep === 2) {
-        if (!state.yearLevelName) return;
-        currentStep = 3;
-      } else if (currentStep === 3) {
-        if (!state.sectionId) return;
-        currentStep = 4;
-      } else if (currentStep === 4) {
-        if (!state.selectedStudentIds.length) return;
-        currentStep = 5;
-      } else if (currentStep === 5) {
-        audienceValue.value = JSON.stringify({
-          mode: 'selective',
-          student_ids: state.selectedStudentIds.map(function (id) { return Number(id); })
-        });
-        audienceConfirmed = true;
-        closeWizard();
-        return;
-      }
-      renderWizard(true);
     });
 
   })();
